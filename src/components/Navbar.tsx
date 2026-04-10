@@ -30,9 +30,9 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2 group">
-            <img src={logo} alt="VidNest" className="h-8 w-8 object-contain" width={32} height={32} />
+            <img src={logo} alt="KevNest" className="h-8 w-8 object-contain" width={32} height={32} />
             <span className="text-2xl font-bold tracking-tight font-display text-primary">
-              VidNest
+              KevNest
             </span>
           </Link>
 
