@@ -1,6 +1,6 @@
 {
-  "name": "VidNest",
-  "short_name": "VidNest",
+  "name": "KevNest",
+  "short_name": "KevNest",
   "description": "Stream movies, TV shows, and anime - all in one place",
   "start_url": "/",
   "display": "standalone",

@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'vidnest-my-list';
+const STORAGE_KEY = 'kevnest-my-list';
 
 export interface ListItem {
   id: string;
@@ -10,7 +10,17 @@ export interface ListItem {
 
 export function getMyList(): ListItem[] {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (!data) {
+      // Migrate old key
+      const old = localStorage.getItem('vidnest-my-list');
+      if (old) {
+        localStorage.setItem(STORAGE_KEY, old);
+        localStorage.removeItem('vidnest-my-list');
+        return JSON.parse(old);
+      }
+    }
+    return data ? JSON.parse(data) : [];
   } catch {
     return [];
   }
