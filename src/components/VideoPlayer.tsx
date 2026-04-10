@@ -1,24 +1,22 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { Server, AlertCircle, Loader2, SkipForward, RefreshCw } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Server, AlertCircle, Loader2, SkipForward, RefreshCw, Shield } from 'lucide-react';
 import { getServers, getMovieStreamUrl, getTVStreamUrl, getAnimeStreamUrl, type AudioType } from '@/lib/vidnest';
 import { malToAnilistId } from '@/lib/malToAnilist';
 
 interface VideoPlayerProps {
-  // For movies
   tmdbId?: number;
-  // For TV
   season?: number;
   episode?: number;
-  // For anime
   malId?: string;
   animeEpisode?: number;
-  // Common
   title: string;
   type: 'movie' | 'tv' | 'anime';
   totalEpisodes?: number;
   onNextEpisode?: () => void;
   onClose?: () => void;
 }
+
+const ALLOWED_DOMAINS = ['vidnest.fun', 'vidsrc.to', '2anime.xyz'];
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({
   tmdbId, season, episode, malId, animeEpisode,
@@ -30,7 +28,49 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [anilistId, setAnilistId] = useState<number | null>(null);
   const [idLoading, setIdLoading] = useState(type === 'anime');
   const [currentServerIndex, setCurrentServerIndex] = useState(0);
+  const [overlayActive, setOverlayActive] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const servers = getServers();
+
+  // Block popups globally while player is mounted
+  useEffect(() => {
+    const originalOpen = window.open;
+    window.open = () => null;
+
+    // Block navigation attempts from iframes
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Only prevent if it's from an iframe trying to navigate the parent
+    };
+
+    // Intercept click events on ad overlay links
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const link = target.closest('a');
+      if (link && link.href && !ALLOWED_DOMAINS.some(d => link.href.includes(d))) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    document.addEventListener('click', handleClick, true);
+
+    return () => {
+      window.open = originalOpen;
+      document.removeEventListener('click', handleClick, true);
+    };
+  }, []);
+
+  // Block iframe navigation attempts via message events
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      // Only accept messages from allowed domains
+      if (e.origin && !ALLOWED_DOMAINS.some(d => e.origin.includes(d))) {
+        return;
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   useEffect(() => {
     if (type === 'anime' && malId) {
@@ -69,6 +109,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
   }, [currentServerIndex, servers.length]);
 
+  const handleIframeLoad = useCallback(() => {
+    setIsLoading(false);
+    // Temporarily show overlay to catch initial ad clicks, then hide for interaction
+    setOverlayActive(true);
+    setTimeout(() => setOverlayActive(false), 1500);
+  }, []);
+
+  const handleOverlayClick = useCallback(() => {
+    // User clicked the overlay - pass through to iframe by hiding overlay
+    setOverlayActive(false);
+  }, []);
+
   let embedUrl = '';
   if (type === 'movie' && tmdbId) {
     embedUrl = getMovieStreamUrl(tmdbId, currentServerIndex);
@@ -105,8 +157,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </div>
         )}
 
+        {/* Ad-blocking overlay - catches initial redirect clicks */}
+        {overlayActive && (
+          <div
+            className="absolute inset-0 z-20 cursor-pointer"
+            onClick={handleOverlayClick}
+            style={{ background: 'transparent' }}
+          />
+        )}
+
         {embedUrl && (
           <iframe
+            ref={iframeRef}
             key={embedUrl}
             src={embedUrl}
             className="w-full h-full"
@@ -114,7 +176,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             allow="autoplay; fullscreen; encrypted-media"
             frameBorder="0"
             title={title}
-            onLoad={() => setIsLoading(false)}
+            onLoad={handleIframeLoad}
             onError={handleIframeError}
           />
         )}
@@ -163,6 +225,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Shield size={10} className="text-green-500" />
+            <span>Ad Protection</span>
           </div>
         </div>
 

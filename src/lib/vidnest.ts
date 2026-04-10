@@ -1,5 +1,5 @@
 /**
- * Vidnest Streaming Service
+ * KevNest Streaming Service
  * Unified streaming through Vidnest servers for all content types
  */
 
@@ -14,13 +14,13 @@ interface StreamServer {
 
 const SERVERS: StreamServer[] = [
   {
-    name: 'Vidnest',
+    name: 'KevNest',
     buildMovieUrl: (id) => `https://vidnest.fun/movie/${id}`,
     buildTVUrl: (id, s, e) => `https://vidnest.fun/tv/${id}/${s}/${e}`,
     buildAnimeUrl: (id, ep, type) => `https://vidnest.fun/anime/${id}/${ep}/${type}`,
   },
   {
-    name: 'Vidnest Pro',
+    name: 'KevNest Pro',
     buildMovieUrl: (id) => `https://vidnest.fun/embed/movie/${id}`,
     buildTVUrl: (id, s, e) => `https://vidnest.fun/embed/tv/${id}/${s}/${e}`,
     buildAnimeUrl: (id, ep, type) => `https://vidnest.fun/anime/${id}/${ep}/${type}`,

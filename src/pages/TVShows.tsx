@@ -86,7 +86,7 @@ const TVShows = () => {
       <main className="pt-24 pb-20 max-w-7xl mx-auto px-4 md:px-6 space-y-10">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold font-display mb-2">TV Shows</h1>
-          <p className="text-sm text-muted-foreground">Stream TV series with Vidnest servers.</p>
+          <p className="text-sm text-muted-foreground">Stream TV series with KevNest servers.</p>
         </div>
         <TVShowRow title="🔥 Trending" items={trending} onItemClick={(id) => navigate(`/tv/${id}`)} loading={loading} />
         <TVShowRow title="⭐ Popular" items={popular} onItemClick={(id) => navigate(`/tv/${id}`)} loading={loading} />

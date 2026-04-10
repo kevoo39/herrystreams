@@ -3,8 +3,10 @@ import { useParams, Link } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import AppFooter from '@/components/AppFooter';
 import VideoPlayer from '@/components/VideoPlayer';
-import { Play, Plus, Star, Calendar, Clock, ChevronLeft, List } from 'lucide-react';
+import { Play, Plus, Star, Calendar, Clock, ChevronLeft, List, Volume2, VolumeX, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const EPISODES_PER_PAGE = 100;
 
 const AnimeDetails = () => {
   const { id } = useParams();
@@ -13,18 +15,51 @@ const AnimeDetails = () => {
   const [loading, setLoading] = useState(true);
   const [selectedEpisode, setSelectedEpisode] = useState<number | null>(null);
   const [relatedSeasons, setRelatedSeasons] = useState<any[]>([]);
+  const [trailerMuted, setTrailerMuted] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalEpisodes, setTotalEpisodes] = useState(0);
+  const [episodesLoading, setEpisodesLoading] = useState(false);
+
+  // Fetch all episode pages from Jikan
+  const fetchAllEpisodes = useCallback(async (animeId: string) => {
+    setEpisodesLoading(true);
+    let allEps: any[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      try {
+        // Jikan rate limit: wait between requests
+        if (page > 1) await new Promise(r => setTimeout(r, 400));
+        const res = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/episodes?page=${page}`);
+        const data = await res.json();
+        const eps = data.data || [];
+        allEps = [...allEps, ...eps];
+        hasMore = data.pagination?.has_next_page || false;
+        page++;
+      } catch {
+        hasMore = false;
+      }
+    }
+
+    setEpisodes(allEps);
+    setTotalEpisodes(allEps.length);
+    setEpisodesLoading(false);
+  }, []);
 
   useEffect(() => {
     const fetchDetails = async () => {
       try {
-        const [animeRes, episodesRes] = await Promise.all([
-          fetch(`https://api.jikan.moe/v4/anime/${id}`),
-          fetch(`https://api.jikan.moe/v4/anime/${id}/episodes`)
-        ]);
+        const animeRes = await fetch(`https://api.jikan.moe/v4/anime/${id}`);
         const animeData = await animeRes.json();
-        const episodesData = await episodesRes.json();
         setAnime(animeData.data);
-        setEpisodes(episodesData.data || []);
+
+        // Set total from API data first for quick display
+        const apiTotal = animeData.data?.episodes || 0;
+        setTotalEpisodes(apiTotal);
+
+        // Fetch all episodes (paginated)
+        await fetchAllEpisodes(id!);
 
         try {
           await new Promise(r => setTimeout(r, 400));
@@ -40,7 +75,7 @@ const AnimeDetails = () => {
     };
     fetchDetails();
     window.scrollTo(0, 0);
-  }, [id]);
+  }, [id, fetchAllEpisodes]);
 
   const handleNextEpisode = useCallback(() => {
     if (selectedEpisode && episodes.length > 0) {
@@ -51,6 +86,22 @@ const AnimeDetails = () => {
       }
     }
   }, [selectedEpisode, episodes]);
+
+  // For episodes without Jikan data, generate placeholder entries
+  const displayEpisodes = episodes.length > 0
+    ? episodes
+    : totalEpisodes > 0
+      ? Array.from({ length: totalEpisodes }, (_, i) => ({ mal_id: i + 1, title: `Episode ${i + 1}` }))
+      : [];
+
+  const totalPages = Math.ceil(displayEpisodes.length / EPISODES_PER_PAGE);
+  const paginatedEpisodes = displayEpisodes.slice(
+    (currentPage - 1) * EPISODES_PER_PAGE,
+    currentPage * EPISODES_PER_PAGE
+  );
+
+  // Get trailer embed URL from Jikan data
+  const trailerUrl = anime?.trailer?.embed_url;
 
   if (loading) return (
     <div className="min-h-screen bg-background flex items-center justify-center">
@@ -84,7 +135,7 @@ const AnimeDetails = () => {
                   <div className="min-w-0">
                     <h2 className="text-lg font-bold font-display truncate">Now Playing</h2>
                     <p className="text-xs text-muted-foreground truncate">
-                      Episode {selectedEpisode}: {episodes.find(e => e.mal_id === selectedEpisode)?.title || 'Untitled'}
+                      Episode {selectedEpisode}: {displayEpisodes.find(e => e.mal_id === selectedEpisode)?.title || 'Untitled'}
                     </p>
                   </div>
                 </div>
@@ -93,7 +144,7 @@ const AnimeDetails = () => {
                   animeEpisode={selectedEpisode}
                   title={anime.title}
                   type="anime"
-                  totalEpisodes={episodes.length}
+                  totalEpisodes={displayEpisodes.length}
                   onNextEpisode={handleNextEpisode}
                 />
               </motion.div>
@@ -115,6 +166,7 @@ const AnimeDetails = () => {
                     {anime.score && <div className="flex items-center gap-1 text-primary"><Star size={14} fill="currentColor" /><span className="font-bold">{anime.score}</span></div>}
                     {anime.aired?.prop?.from?.year && <div className="flex items-center gap-1"><Calendar size={12} /><span>{anime.aired.prop.from.year}</span></div>}
                     {anime.duration && <div className="flex items-center gap-1"><Clock size={12} /><span>{anime.duration}</span></div>}
+                    {totalEpisodes > 0 && <span>{totalEpisodes} Episodes</span>}
                   </div>
                   <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4 break-words">{anime.synopsis}</p>
                   <div className="flex flex-wrap gap-3">
@@ -125,6 +177,32 @@ const AnimeDetails = () => {
                       <Plus size={16} />Watchlist
                     </button>
                   </div>
+
+                  {/* Trailer with volume toggle */}
+                  {trailerUrl && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold font-display">Trailer</h3>
+                        <button
+                          onClick={() => setTrailerMuted(!trailerMuted)}
+                          className="flex items-center gap-1.5 px-2.5 py-1 bg-secondary border border-border/30 rounded-lg text-xs font-semibold hover:bg-muted transition-colors"
+                        >
+                          {trailerMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                          {trailerMuted ? 'Unmute' : 'Mute'}
+                        </button>
+                      </div>
+                      <div className="aspect-video rounded-lg overflow-hidden border border-border/30">
+                        <iframe
+                          src={`${trailerUrl}${trailerUrl.includes('?') ? '&' : '?'}autoplay=0&mute=${trailerMuted ? 1 : 0}&enablejsapi=1`}
+                          className="w-full h-full"
+                          allowFullScreen
+                          allow="autoplay; encrypted-media"
+                          frameBorder="0"
+                          title={`${anime.title} Trailer`}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -153,32 +231,60 @@ const AnimeDetails = () => {
                 <List size={16} className="text-primary" />
                 <h2 className="text-lg font-bold font-display">Episodes</h2>
               </div>
-              <span className="text-[10px] font-bold px-2 py-1 bg-secondary rounded border border-border/30">{episodes.length} Total</span>
+              <span className="text-[10px] font-bold px-2 py-1 bg-secondary rounded border border-border/30">
+                {displayEpisodes.length} Total
+              </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {episodes.length > 0 ? episodes.map((ep: any) => (
-                <button
-                  key={ep.mal_id}
-                  onClick={() => { setSelectedEpisode(ep.mal_id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
-                    selectedEpisode === ep.mal_id ? 'border-primary bg-primary/5' : 'border-border/30 hover:border-primary/30 hover:bg-secondary/30'
-                  }`}
-                >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
-                    selectedEpisode === ep.mal_id ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
-                  }`}>
-                    {ep.mal_id}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate">{ep.title || `Episode ${ep.mal_id}`}</p>
-                    {ep.aired && <p className="text-[10px] text-muted-foreground">{new Date(ep.aired).toLocaleDateString()}</p>}
-                  </div>
-                  <Play size={14} className="text-muted-foreground shrink-0" />
-                </button>
-              )) : (
-                <p className="text-sm text-muted-foreground col-span-2 text-center py-8">No episode data available. Click "Watch Now" to start from Episode 1.</p>
-              )}
-            </div>
+
+            {/* Page selector for long series */}
+            {totalPages > 1 && (
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <span className="text-xs text-muted-foreground font-semibold">Page:</span>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      currentPage === page ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {(page - 1) * EPISODES_PER_PAGE + 1}-{Math.min(page * EPISODES_PER_PAGE, displayEpisodes.length)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {episodesLoading && episodes.length === 0 ? (
+              <div className="flex items-center justify-center py-8 gap-2">
+                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm text-muted-foreground">Loading episodes...</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {paginatedEpisodes.length > 0 ? paginatedEpisodes.map((ep: any) => (
+                  <button
+                    key={ep.mal_id}
+                    onClick={() => { setSelectedEpisode(ep.mal_id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    className={`flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                      selectedEpisode === ep.mal_id ? 'border-primary bg-primary/5' : 'border-border/30 hover:border-primary/30 hover:bg-secondary/30'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                      selectedEpisode === ep.mal_id ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+                    }`}>
+                      {ep.mal_id}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold truncate">{ep.title || `Episode ${ep.mal_id}`}</p>
+                      {ep.aired && <p className="text-[10px] text-muted-foreground">{new Date(ep.aired).toLocaleDateString()}</p>}
+                    </div>
+                    <Play size={14} className="text-muted-foreground shrink-0" />
+                  </button>
+                )) : (
+                  <p className="text-sm text-muted-foreground col-span-2 text-center py-8">No episode data available. Click "Watch Now" to start from Episode 1.</p>
+                )}
+              </div>
+            )}
           </section>
         </main>
       </div>

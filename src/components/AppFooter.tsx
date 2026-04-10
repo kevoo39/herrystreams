@@ -8,8 +8,8 @@ const AppFooter = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
           <div className="col-span-2 md:col-span-1 space-y-4">
             <Link to="/" className="inline-flex items-center gap-2">
-              <img src={logo} alt="VidNest" className="h-7 w-7 object-contain" width={28} height={28} loading="lazy" />
-              <span className="text-xl font-bold tracking-tight font-display text-primary">VidNest</span>
+              <img src={logo} alt="KevNest" className="h-7 w-7 object-contain" width={28} height={28} loading="lazy" />
+              <span className="text-xl font-bold tracking-tight font-display text-primary">KevNest</span>
             </Link>
             <p className="text-sm text-muted-foreground leading-relaxed">
               Your ultimate destination for movies, TV shows, and anime streaming.
@@ -42,7 +42,7 @@ const AppFooter = () => {
         </div>
 
         <div className="pt-6 border-t border-border/30 flex flex-col md:flex-row justify-between items-center gap-3 text-xs text-muted-foreground">
-          <p>© {new Date().getFullYear()} VidNest. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} KevNest. All rights reserved.</p>
           <p>Powered by TMDB & Jikan API.</p>
         </div>
       </div>
