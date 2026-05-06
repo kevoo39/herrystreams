@@ -6,9 +6,9 @@ const corsHeaders = {
   "Access-Control-Expose-Headers": "content-length, content-range, accept-ranges",
 };
 
-function selfBase(req: Request): string {
-  const u = new URL(req.url);
-  return `${u.origin}${u.pathname}`;
+function selfBase(_req: Request): string {
+  const supaUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  return `${supaUrl}/functions/v1/hls-proxy`;
 }
 
 function rewritePlaylist(text: string, baseUrl: string, referer: string, proxyBase: string): string {
