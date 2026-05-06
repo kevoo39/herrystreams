@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Server, AlertCircle, Loader2, SkipForward, RefreshCw, Shield } from 'lucide-react';
 import { getServers, getMovieStreamUrl, getTVStreamUrl, getAnimeStreamUrl, type AudioType } from '@/lib/vidnest';
 import { malToAnilistId } from '@/lib/malToAnilist';
+import NativeAnimePlayer from './NativeAnimePlayer';
 
 interface VideoPlayerProps {
   tmdbId?: number;
@@ -29,6 +30,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [idLoading, setIdLoading] = useState(type === 'anime');
   const [currentServerIndex, setCurrentServerIndex] = useState(0);
   const [overlayActive, setOverlayActive] = useState(false);
+  const [useNative, setUseNative] = useState(type === 'anime');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const servers = getServers();
 
@@ -131,6 +133,69 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }
 
   const currentEp = type === 'anime' ? animeEpisode : episode;
+
+  // Native HLS path for anime
+  if (type === 'anime' && useNative) {
+    if (idLoading) {
+      return (
+        <div className="w-full aspect-video bg-background rounded-xl flex items-center justify-center border border-border/30">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      );
+    }
+    if (!anilistId || !animeEpisode) {
+      return (
+        <div className="w-full aspect-video bg-background rounded-xl flex items-center justify-center border border-border/30">
+          <p className="text-xs text-muted-foreground">Could not resolve anime ID.</p>
+        </div>
+      );
+    }
+    return (
+      <div className="flex flex-col gap-3 w-full">
+        <NativeAnimePlayer
+          anilistId={anilistId}
+          episode={animeEpisode}
+          audioType={audioType}
+          title={title}
+          onFallback={() => setUseNative(false)}
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-secondary/30 border border-border/30 rounded-xl">
+          <div className="flex items-center gap-3">
+            <Server size={12} className="text-primary shrink-0" />
+            <span className="text-xs font-semibold">Audio</span>
+            <div className="flex bg-background p-0.5 rounded-lg border border-border/30">
+              {(['sub', 'dub'] as AudioType[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setAudioType(t)}
+                  className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                    audioType === t ? 'bg-primary text-primary-foreground' : 'hover:bg-secondary text-muted-foreground'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={() => setUseNative(false)}
+            className="text-[10px] text-muted-foreground hover:text-primary transition-colors"
+          >
+            Switch to embed player
+          </button>
+          {onNextEpisode && totalEpisodes && currentEp && currentEp < totalEpisodes && (
+            <button
+              onClick={onNextEpisode}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:brightness-110 transition-all"
+            >
+              <SkipForward size={12} />
+              Next Episode
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3 w-full">
