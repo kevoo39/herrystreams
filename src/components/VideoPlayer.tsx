@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Server, AlertCircle, Loader2, SkipForward, RefreshCw, Shield } from 'lucide-react';
 import { getServers, getMovieStreamUrl, getTVStreamUrl, getAnimeStreamUrl, type AudioType } from '@/lib/vidnest';
 import { malToAnilistId } from '@/lib/malToAnilist';
+import NativeAnimePlayer from './NativeAnimePlayer';
 
 interface VideoPlayerProps {
   tmdbId?: number;
@@ -29,6 +30,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [idLoading, setIdLoading] = useState(type === 'anime');
   const [currentServerIndex, setCurrentServerIndex] = useState(0);
   const [overlayActive, setOverlayActive] = useState(false);
+  const [useNative, setUseNative] = useState(type === 'anime');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const servers = getServers();
 
