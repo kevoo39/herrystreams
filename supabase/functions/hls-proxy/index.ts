@@ -47,6 +47,8 @@ Deno.serve(async (req) => {
     const u = new URL(req.url);
     const target = u.searchParams.get("url");
     const referer = u.searchParams.get("ref") ?? "https://aniwaves.ru/";
+    const dl = u.searchParams.get("dl");
+    const dlName = u.searchParams.get("name") || "stream";
     if (!target) {
       return new Response("missing url", { status: 400, headers: corsHeaders });
     }
@@ -79,6 +81,10 @@ Deno.serve(async (req) => {
       const rewritten = rewritePlaylist(text, target, referer, selfBase(req));
       respHeaders["content-type"] = "application/vnd.apple.mpegurl";
       delete respHeaders["content-length"];
+      if (dl) {
+        const safe = dlName.replace(/[^a-z0-9_\-]+/gi, "_").slice(0, 80) || "stream";
+        respHeaders["content-disposition"] = `attachment; filename="${safe}.m3u8"`;
+      }
       return new Response(rewritten, { status: upstream.status, headers: respHeaders });
     }
 
