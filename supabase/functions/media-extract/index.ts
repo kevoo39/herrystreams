@@ -76,6 +76,25 @@ function pickStream(payload: any): { url: string; referer: string; language?: st
   return { url, referer, language: pick.language };
 }
 
+function rewritePlaylist(text: string, baseUrl: string, referer: string, proxyBase: string): string {
+  const base = new URL(baseUrl);
+  const lines = text.split(/\r?\n/);
+  return lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return line;
+    if (trimmed.startsWith("#")) {
+      return line.replace(/URI="([^"]+)"/g, (_m, u) => {
+        const abs = new URL(u, base).toString();
+        return `URI="${proxyBase}?url=${encodeURIComponent(abs)}&ref=${encodeURIComponent(referer)}"`;
+      });
+    }
+    try {
+      const abs = new URL(trimmed, base).toString();
+      return `${proxyBase}?url=${encodeURIComponent(abs)}&ref=${encodeURIComponent(referer)}`;
+    } catch { return line; }
+  }).join("\n");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -86,6 +105,7 @@ Deno.serve(async (req) => {
     const season = u.searchParams.get("season");
     const episode = u.searchParams.get("episode");
     const requestedServer = (u.searchParams.get("server") ?? "").toLowerCase();
+    const inline = u.searchParams.get("inline") === "1"; // return rewritten playlist directly
 
     if (!tmdb) {
       return new Response(JSON.stringify({ error: "missing tmdb" }), {
@@ -112,6 +132,34 @@ Deno.serve(async (req) => {
         const payload = await fetchServer(url);
         const stream = pickStream(payload);
         if (!stream) { errors[server] = "no stream"; continue; }
+
+        if (inline) {
+          // Same-invocation IP fetch — required because Vidnest tokens are IP-locked.
+          const supaUrl = Deno.env.get("SUPABASE_URL") ?? "";
+          const proxyBase = `${supaUrl}/functions/v1/hls-proxy`;
+          const upstream = await fetch(stream.url, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+              Referer: stream.referer,
+              Origin: new URL(stream.referer).origin,
+            },
+            redirect: "follow",
+          });
+          if (!upstream.ok) { errors[server] = `playlist ${upstream.status}`; continue; }
+          const text = await upstream.text();
+          const rewritten = rewritePlaylist(text, upstream.url || stream.url, stream.referer, proxyBase);
+          const headers: Record<string, string> = {
+            ...corsHeaders,
+            "Content-Type": "application/vnd.apple.mpegurl",
+            "X-Stream-Server": server,
+            "X-Stream-Referer": stream.referer,
+          };
+          if (u.searchParams.get("dl") === "1") {
+            const safe = (u.searchParams.get("name") || "stream").replace(/[^a-z0-9_\-]+/gi, "_").slice(0, 80);
+            headers["Content-Disposition"] = `attachment; filename="${safe}.m3u8"`;
+          }
+          return new Response(rewritten, { status: 200, headers });
+        }
 
         return new Response(JSON.stringify({
           url: stream.url,

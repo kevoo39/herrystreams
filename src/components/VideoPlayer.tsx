@@ -110,7 +110,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
     let nativeMode: any = null;
     if (type === 'anime' && anilistId && animeEpisode) {
-      nativeMode = { kind: 'anime', anilistId, episode: animeEpisode, audioType };
+      nativeMode = { kind: 'anime', anilistId, episode: animeEpisode, audioType, malId };
     } else if (type === 'movie' && tmdbId) {
       nativeMode = { kind: 'movie', tmdbId };
     } else if (type === 'tv' && tmdbId && season && episode) {
