@@ -1,80 +1,128 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { AlertCircle, Loader2, RefreshCw, Shield, Download } from 'lucide-react';
+import { AlertCircle, Loader2, RefreshCw, Shield, Download, RotateCcw } from 'lucide-react';
+import {
+  buildResumeId, getResume, saveResume, getPlayerSettings, savePlayerSettings,
+  type ResumeKind,
+} from '@/lib/resume';
 
 type Mode =
-  | { kind: 'anime'; anilistId: number; episode: number; audioType: 'sub' | 'dub'; server?: 'aniwave' | 'anitaku' }
-  | { kind: 'movie'; tmdbId: number; server?: string }
-  | { kind: 'tv'; tmdbId: number; season: number; episode: number; server?: string };
+  | { kind: 'anime'; anilistId: number; episode: number; audioType: 'sub' | 'dub'; malId?: string }
+  | { kind: 'movie'; tmdbId: number }
+  | { kind: 'tv'; tmdbId: number; season: number; episode: number };
 
 interface NativeMediaPlayerProps {
   mode: Mode;
   title: string;
+  poster?: string;
   onFallback?: () => void;
 }
 
 const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-const PROXY_BASE = `${FN_BASE}/hls-proxy`;
 const APIKEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, onFallback }) => {
+const animeServers: ('aniwave' | 'anitaku')[] = ['aniwave', 'anitaku'];
+const mediaServers = ['allmovies', 'moviebox', 'catflix', 'flixhq', 'vidlink'];
+
+const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, poster, onFallback }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [streamReferer, setStreamReferer] = useState<string>('');
+  const [playlistUrl, setPlaylistUrl] = useState<string | null>(null);
+  const [serverIdx, setServerIdx] = useState(0);
+  const [resumePromptAt, setResumePromptAt] = useState<number | null>(null);
 
-  // Server fallback rotation
-  const animeServers: ('aniwave' | 'anitaku')[] = ['aniwave', 'anitaku'];
-  const mediaServers = ['allmovies', 'moviebox', 'catflix', 'flixhq', 'vidlink'];
-  const [animeServerIdx, setAnimeServerIdx] = useState(0);
-  const [mediaServerIdx, setMediaServerIdx] = useState(0);
+  const resumeId = buildResumeId({
+    kind: mode.kind as ResumeKind,
+    tmdbId: 'tmdbId' in mode ? mode.tmdbId : undefined,
+    season: 'season' in mode ? mode.season : undefined,
+    episode: 'episode' in mode ? mode.episode : undefined,
+    malId: mode.kind === 'anime' ? mode.malId : undefined,
+    anilistId: mode.kind === 'anime' ? mode.anilistId : undefined,
+    animeEpisode: mode.kind === 'anime' ? mode.episode : undefined,
+    audioType: mode.kind === 'anime' ? mode.audioType : undefined,
+  });
+
+  // Build inline playlist URL (single-invocation: extract + fetch playlist on same edge IP)
+  const buildPlaylistUrl = (idx: number, dl = false) => {
+    const params = new URLSearchParams({ inline: '1' });
+    if (dl) { params.set('dl', '1'); params.set('name', title); }
+    if (mode.kind === 'movie') {
+      params.set('type', 'movie');
+      params.set('tmdb', String(mode.tmdbId));
+      params.set('server', mediaServers[idx % mediaServers.length]);
+      return `${FN_BASE}/media-extract?${params.toString()}&apikey=${APIKEY}`;
+    }
+    if (mode.kind === 'tv') {
+      params.set('type', 'tv');
+      params.set('tmdb', String(mode.tmdbId));
+      params.set('season', String(mode.season));
+      params.set('episode', String(mode.episode));
+      params.set('server', mediaServers[idx % mediaServers.length]);
+      return `${FN_BASE}/media-extract?${params.toString()}&apikey=${APIKEY}`;
+    }
+    // anime — anime-extract still returns JSON, fall back to old proxy chain
+    return null;
+  };
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setStreamUrl(null);
+    setPlaylistUrl(null);
 
     const load = async () => {
       try {
-        let url = '';
+        let proxied = '';
         if (mode.kind === 'anime') {
-          const server = animeServers[animeServerIdx];
-          url = `${FN_BASE}/anime-extract?anilist=${mode.anilistId}&ep=${mode.episode}&type=${mode.audioType}&server=${server}`;
-        } else if (mode.kind === 'movie') {
-          const server = mediaServers[mediaServerIdx];
-          url = `${FN_BASE}/media-extract?type=movie&tmdb=${mode.tmdbId}&server=${server}`;
+          const server = animeServers[serverIdx % animeServers.length];
+          const res = await fetch(
+            `${FN_BASE}/anime-extract?anilist=${mode.anilistId}&ep=${mode.episode}&type=${mode.audioType}&server=${server}`,
+            { headers: { apikey: APIKEY } }
+          );
+          if (!res.ok) throw new Error(`extract ${res.status}`);
+          const payload = await res.json();
+          if (!payload?.url) throw new Error('No stream URL');
+          proxied = `${FN_BASE}/hls-proxy?url=${encodeURIComponent(payload.url)}&ref=${encodeURIComponent(payload.referer || '')}`;
         } else {
-          const server = mediaServers[mediaServerIdx];
-          url = `${FN_BASE}/media-extract?type=tv&tmdb=${mode.tmdbId}&season=${mode.season}&episode=${mode.episode}&server=${server}`;
+          // Inline mode for movies/TV — avoids IP-locked-token issue
+          const inline = buildPlaylistUrl(serverIdx);
+          if (!inline) throw new Error('Cannot build playlist');
+          proxied = inline;
         }
 
-        const res = await fetch(url, { headers: { apikey: APIKEY } });
-        if (!res.ok) throw new Error(`extract ${res.status}`);
-        const payload = await res.json();
         if (cancelled) return;
-        if (!payload?.url) throw new Error('No stream URL');
-
-        const proxied = `${PROXY_BASE}?url=${encodeURIComponent(payload.url)}&ref=${encodeURIComponent(payload.referer || '')}`;
-        setStreamUrl(proxied);
-        setStreamReferer(payload.referer || '');
+        setPlaylistUrl(proxied);
 
         const video = videoRef.current;
         if (!video) return;
 
+        // Apply persisted settings
+        const settings = getPlayerSettings();
+        video.volume = settings.volume;
+        video.muted = settings.muted;
+        video.playbackRate = settings.playbackRate;
+
         if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+
+        const onReady = () => {
+          setLoading(false);
+          // Offer resume if we have a saved position > 30s and < 95% through
+          const saved = getResume(resumeId);
+          if (saved && saved.position > 30 && saved.duration > 0 && saved.position < saved.duration * 0.95) {
+            setResumePromptAt(saved.position);
+          } else {
+            video.play().catch(() => {});
+          }
+        };
 
         if (Hls.isSupported()) {
           const hls = new Hls({ enableWorker: true });
           hlsRef.current = hls;
           hls.loadSource(proxied);
           hls.attachMedia(video);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            setLoading(false);
-            video.play().catch(() => {});
-          });
+          hls.on(Hls.Events.MANIFEST_PARSED, onReady);
           hls.on(Hls.Events.ERROR, (_e, data) => {
             if (data.fatal) {
               setError(data.details || 'Playback error');
@@ -83,10 +131,9 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, onFa
           });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = proxied;
-          video.addEventListener('loadedmetadata', () => setLoading(false), { once: true });
-          video.play().catch(() => {});
+          video.addEventListener('loadedmetadata', onReady, { once: true });
         } else {
-          throw new Error('HLS not supported');
+          throw new Error('HLS not supported in this browser');
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -102,18 +149,79 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, onFa
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(mode), animeServerIdx, mediaServerIdx]);
+  }, [JSON.stringify(mode), serverIdx]);
 
-  const tryNextServer = () => {
-    if (mode.kind === 'anime') {
-      setAnimeServerIdx((i) => (i + 1) % animeServers.length);
-    } else {
-      setMediaServerIdx((i) => (i + 1) % mediaServers.length);
-    }
+  // Persist player settings on change + save resume position periodically
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    let lastSave = 0;
+    const onVolume = () => savePlayerSettings({ volume: v.volume, muted: v.muted });
+    const onRate = () => savePlayerSettings({ playbackRate: v.playbackRate });
+    const onTime = () => {
+      const now = Date.now();
+      if (now - lastSave < 5000) return;
+      lastSave = now;
+      if (!Number.isFinite(v.duration) || v.duration <= 0) return;
+      saveResume({
+        id: resumeId,
+        kind: mode.kind as ResumeKind,
+        title,
+        poster,
+        tmdbId: 'tmdbId' in mode ? mode.tmdbId : undefined,
+        season: 'season' in mode ? mode.season : undefined,
+        episode: 'episode' in mode ? mode.episode : undefined,
+        malId: mode.kind === 'anime' ? mode.malId : undefined,
+        anilistId: mode.kind === 'anime' ? mode.anilistId : undefined,
+        animeEpisode: mode.kind === 'anime' ? mode.episode : undefined,
+        audioType: mode.kind === 'anime' ? mode.audioType : undefined,
+        position: v.currentTime,
+        duration: v.duration,
+        updatedAt: now,
+      });
+    };
+    v.addEventListener('volumechange', onVolume);
+    v.addEventListener('ratechange', onRate);
+    v.addEventListener('timeupdate', onTime);
+    v.addEventListener('pause', onTime);
+    return () => {
+      v.removeEventListener('volumechange', onVolume);
+      v.removeEventListener('ratechange', onRate);
+      v.removeEventListener('timeupdate', onTime);
+      v.removeEventListener('pause', onTime);
+    };
+  }, [resumeId, title, poster, mode]);
+
+  const tryNextServer = () => setServerIdx((i) => i + 1);
+  const currentServerLabel =
+    mode.kind === 'anime'
+      ? animeServers[serverIdx % animeServers.length]
+      : mediaServers[serverIdx % mediaServers.length];
+
+  const acceptResume = () => {
+    const v = videoRef.current;
+    if (v && resumePromptAt != null) v.currentTime = resumePromptAt;
+    setResumePromptAt(null);
+    v?.play().catch(() => {});
+  };
+  const dismissResume = () => {
+    setResumePromptAt(null);
+    videoRef.current?.play().catch(() => {});
   };
 
-  const currentServerLabel =
-    mode.kind === 'anime' ? animeServers[animeServerIdx] : mediaServers[mediaServerIdx];
+  const downloadHref = (() => {
+    if (mode.kind === 'anime') {
+      // Anime stays on the legacy proxy chain; reuse the playlistUrl with dl param
+      return playlistUrl ? `${playlistUrl}&dl=1&name=${encodeURIComponent(title)}` : null;
+    }
+    return buildPlaylistUrl(serverIdx, true);
+  })();
+
+  const fmt = (s: number) => {
+    if (!Number.isFinite(s)) return '';
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="relative w-full aspect-video bg-background rounded-xl overflow-hidden border border-border/30 shadow-2xl">
@@ -121,8 +229,8 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, onFa
         ref={videoRef}
         controls
         playsInline
+        poster={poster}
         className="w-full h-full bg-black"
-        crossOrigin="anonymous"
         title={title}
       />
       {loading && !error && (
@@ -152,16 +260,24 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, onFa
           </div>
         </div>
       )}
+      {resumePromptAt != null && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/85 backdrop-blur-sm px-3 py-2 rounded-lg border border-border/40 z-30">
+          <RotateCcw size={14} className="text-primary" />
+          <span className="text-xs text-white">Resume from {fmt(resumePromptAt)}?</span>
+          <button onClick={acceptResume} className="px-2 py-1 rounded bg-primary text-primary-foreground text-[10px] font-bold">Resume</button>
+          <button onClick={dismissResume} className="px-2 py-1 rounded bg-secondary text-[10px] font-bold">Start over</button>
+        </div>
+      )}
       <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-green-400 pointer-events-none">
         <Shield size={10} /> Ad-Free · {currentServerLabel}
       </div>
-      {streamUrl && !error && (
+      {downloadHref && !error && (
         <a
-          href={`${streamUrl}&dl=1&name=${encodeURIComponent(title)}`}
+          href={downloadHref}
           className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-white hover:bg-primary transition-colors"
-          title="Download stream playlist (.m3u8). Open with VLC, or convert to MP4 with: ffmpeg -i file.m3u8 -c copy out.mp4"
+          title="Download .m3u8 playlist. Open with VLC, or convert: ffmpeg -i file.m3u8 -c copy out.mp4"
         >
-          <Download size={10} /> Download .m3u8
+          <Download size={10} /> Download
         </a>
       )}
     </div>
