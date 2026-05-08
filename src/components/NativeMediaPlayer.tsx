@@ -157,12 +157,11 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, onFa
       </div>
       {streamUrl && !error && (
         <a
-          href={streamUrl}
-          download={`${title.replace(/[^a-z0-9]+/gi, '_')}.m3u8`}
+          href={`${streamUrl}&dl=1&name=${encodeURIComponent(title)}`}
           className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-white hover:bg-primary transition-colors"
-          title="Download stream playlist (.m3u8). Use a tool like VLC or yt-dlp to save as MP4."
+          title="Download stream playlist (.m3u8). Open with VLC, or convert to MP4 with: ffmpeg -i file.m3u8 -c copy out.mp4"
         >
-          <Download size={10} /> Download
+          <Download size={10} /> Download .m3u8
         </a>
       )}
     </div>
