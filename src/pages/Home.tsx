@@ -54,13 +54,23 @@ const Home = () => {
 
   const openResume = (e: ResumeEntry) => {
     if (e.kind === 'movie') navigate(`/movie/${e.tmdbId}`);
-    else if (e.kind === 'tv') navigate(`/tv/${e.tmdbId}`);
-    else navigate(`/anime/${e.malId ?? e.anilistId}`);
+    else if (e.kind === 'tv') navigate(`/tv/${e.tmdbId}?s=${e.season}&e=${e.episode}`);
+    else navigate(`/anime/${e.malId ?? e.anilistId}?ep=${e.animeEpisode}&audio=${e.audioType ?? 'sub'}`);
   };
 
   const dismissResume = (id: string) => {
     removeResume(id);
     setResume((prev) => prev.filter((e) => e.id !== id));
+  };
+
+  const fmtRemaining = (pos: number, dur: number) => {
+    const left = Math.max(0, dur - pos);
+    if (!Number.isFinite(left) || left <= 0) return '';
+    const m = Math.floor(left / 60);
+    if (m < 1) return '<1 min left';
+    if (m < 60) return `${m} min left`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m left`;
   };
 
   return (
