@@ -10,6 +10,7 @@ const EPISODES_PER_PAGE = 100;
 
 const AnimeDetails = () => {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const [anime, setAnime] = useState<any>(null);
   const [episodes, setEpisodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
