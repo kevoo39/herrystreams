@@ -284,14 +284,47 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
       <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-green-400 pointer-events-none">
         <Shield size={10} /> Ad-Free · {currentServerLabel}
       </div>
-      {downloadHref && !error && (
-        <a
-          href={downloadHref}
-          className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-white hover:bg-primary transition-colors"
-          title="Download .m3u8 playlist. Open with VLC, or convert: ffmpeg -i file.m3u8 -c copy out.mp4"
+      {playlistUrl && !error && (
+        <button
+          onClick={startDownload}
+          disabled={!!dlProgress && dlProgress.status !== 'done' && dlProgress.status !== 'error'}
+          className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-white hover:bg-primary transition-colors disabled:opacity-60"
+          title="Download as a single .ts video file (playable in VLC or any modern player)"
         >
           <Download size={10} /> Download
-        </a>
+        </button>
+      )}
+      {dlProgress && (
+        <div className="absolute bottom-16 right-2 z-30 w-64 bg-black/90 backdrop-blur-sm border border-border/40 rounded-lg p-3 text-white">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold">
+              {dlProgress.status === 'parsing' && 'Preparing download…'}
+              {dlProgress.status === 'downloading' && 'Downloading'}
+              {dlProgress.status === 'finalizing' && 'Finalizing…'}
+              {dlProgress.status === 'done' && 'Download ready ✓'}
+              {dlProgress.status === 'error' && 'Download failed'}
+            </span>
+            <button onClick={cancelDownload} className="text-muted-foreground hover:text-white">
+              <X size={14} />
+            </button>
+          </div>
+          {dlProgress.total > 0 && (
+            <>
+              <div className="h-1.5 bg-secondary rounded overflow-hidden mb-1">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${Math.round((dlProgress.done / dlProgress.total) * 100)}%` }}
+                />
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {dlProgress.done}/{dlProgress.total} segments · {(dlProgress.bytes / 1024 / 1024).toFixed(1)} MB
+              </div>
+            </>
+          )}
+          {dlProgress.message && (
+            <div className="text-[10px] text-destructive mt-1">{dlProgress.message}</div>
+          )}
+        </div>
       )}
     </div>
   );
