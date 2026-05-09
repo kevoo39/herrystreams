@@ -210,13 +210,25 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     videoRef.current?.play().catch(() => {});
   };
 
-  const downloadHref = (() => {
-    if (mode.kind === 'anime') {
-      // Anime stays on the legacy proxy chain; reuse the playlistUrl with dl param
-      return playlistUrl ? `${playlistUrl}&dl=1&name=${encodeURIComponent(title)}` : null;
+  const [dlProgress, setDlProgress] = useState<DLProgress | null>(null);
+  const dlAbortRef = useRef<AbortController | null>(null);
+
+  const startDownload = async () => {
+    if (!playlistUrl) return;
+    if (dlProgress && dlProgress.status !== 'done' && dlProgress.status !== 'error') return;
+    const ctrl = new AbortController();
+    dlAbortRef.current = ctrl;
+    setDlProgress({ done: 0, total: 0, bytes: 0, status: 'parsing' });
+    try {
+      await downloadHls(playlistUrl, title, setDlProgress, ctrl.signal);
+    } catch {
+      // progress already set to error
     }
-    return buildPlaylistUrl(serverIdx, true);
-  })();
+  };
+  const cancelDownload = () => {
+    dlAbortRef.current?.abort();
+    setDlProgress(null);
+  };
 
   const fmt = (s: number) => {
     if (!Number.isFinite(s)) return '';
