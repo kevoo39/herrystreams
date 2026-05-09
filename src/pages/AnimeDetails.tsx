@@ -76,6 +76,8 @@ const AnimeDetails = () => {
     };
     fetchDetails();
     window.scrollTo(0, 0);
+    const epParam = parseInt(searchParams.get('ep') || '');
+    if (Number.isFinite(epParam) && epParam > 0) setSelectedEpisode(epParam);
   }, [id, fetchAllEpisodes]);
 
   const handleNextEpisode = useCallback(() => {
