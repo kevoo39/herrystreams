@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import AppFooter from '@/components/AppFooter';
 import VideoPlayer from '@/components/VideoPlayer';
@@ -10,6 +10,7 @@ const EPISODES_PER_PAGE = 100;
 
 const AnimeDetails = () => {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const [anime, setAnime] = useState<any>(null);
   const [episodes, setEpisodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +76,8 @@ const AnimeDetails = () => {
     };
     fetchDetails();
     window.scrollTo(0, 0);
+    const epParam = parseInt(searchParams.get('ep') || '');
+    if (Number.isFinite(epParam) && epParam > 0) setSelectedEpisode(epParam);
   }, [id, fetchAllEpisodes]);
 
   const handleNextEpisode = useCallback(() => {

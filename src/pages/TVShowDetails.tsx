@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import AppFooter from '@/components/AppFooter';
 import VideoPlayer from '@/components/VideoPlayer';
@@ -11,6 +11,7 @@ import { addToMyList, removeFromMyList, isInMyList } from '@/lib/myList';
 const TVShowDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [show, setShow] = useState<TMDBTVShowDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedSeason, setSelectedSeason] = useState(1);
@@ -27,7 +28,14 @@ const TVShowDetails = () => {
         const s = await tmdbService.getTVShowDetails(parseInt(id));
         setShow(s);
         setInList(isInMyList(`tv-${id}`));
-        if (s.seasons?.length > 0) {
+        const qsS = parseInt(searchParams.get('s') || '');
+        const qsE = parseInt(searchParams.get('e') || '');
+        if (Number.isFinite(qsS) && qsS > 0) {
+          setSelectedSeason(qsS);
+          if (Number.isFinite(qsE) && qsE > 0) {
+            setPlayingEpisode({ season: qsS, episode: qsE });
+          }
+        } else if (s.seasons?.length > 0) {
           const firstReal = s.seasons.find(s => s.season_number > 0);
           if (firstReal) setSelectedSeason(firstReal.season_number);
         }

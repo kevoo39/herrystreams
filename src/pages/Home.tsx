@@ -54,13 +54,23 @@ const Home = () => {
 
   const openResume = (e: ResumeEntry) => {
     if (e.kind === 'movie') navigate(`/movie/${e.tmdbId}`);
-    else if (e.kind === 'tv') navigate(`/tv/${e.tmdbId}`);
-    else navigate(`/anime/${e.malId ?? e.anilistId}`);
+    else if (e.kind === 'tv') navigate(`/tv/${e.tmdbId}?s=${e.season}&e=${e.episode}`);
+    else navigate(`/anime/${e.malId ?? e.anilistId}?ep=${e.animeEpisode}&audio=${e.audioType ?? 'sub'}`);
   };
 
   const dismissResume = (id: string) => {
     removeResume(id);
     setResume((prev) => prev.filter((e) => e.id !== id));
+  };
+
+  const fmtRemaining = (pos: number, dur: number) => {
+    const left = Math.max(0, dur - pos);
+    if (!Number.isFinite(left) || left <= 0) return '';
+    const m = Math.floor(left / 60);
+    if (m < 1) return '<1 min left';
+    if (m < 60) return `${m} min left`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m left`;
   };
 
   return (
@@ -70,40 +80,57 @@ const Home = () => {
         <HeroSection movie={trending[0]} onPlay={handleMovieClick} onInfo={handleMovieClick} />
         <div className="max-w-7xl mx-auto px-4 md:px-6 -mt-16 relative z-10 pb-20 space-y-10">
           {resume.length > 0 && (
-            <section>
-              <h2 className="text-xl md:text-2xl font-bold mb-4 text-foreground">▶️ Continue Watching</h2>
-              <div className="flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
+            <section aria-label="Continue Watching">
+              <div className="flex items-baseline justify-between mb-4">
+                <h2 className="text-xl md:text-2xl font-bold text-foreground">▶️ Continue Watching</h2>
+                <span className="text-xs text-muted-foreground">{resume.length} item{resume.length === 1 ? '' : 's'}</span>
+              </div>
+              <div className="flex gap-3 md:gap-4 overflow-x-auto pb-3 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide snap-x snap-mandatory">
                 {resume.map((e) => {
                   const pct = e.duration > 0 ? Math.min(100, (e.position / e.duration) * 100) : 0;
                   const subtitle =
-                    e.kind === 'tv' ? `S${e.season}·E${e.episode}` :
-                    e.kind === 'anime' ? `Ep ${e.animeEpisode} · ${e.audioType?.toUpperCase()}` :
+                    e.kind === 'tv' ? `S${e.season} · E${e.episode}` :
+                    e.kind === 'anime' ? `Ep ${e.animeEpisode} · ${(e.audioType ?? 'sub').toUpperCase()}` :
                     'Movie';
+                  const remaining = fmtRemaining(e.position, e.duration);
                   return (
-                    <div key={e.id} className="relative group min-w-[180px] w-[180px] cursor-pointer" onClick={() => openResume(e)}>
-                      <div className="aspect-video bg-secondary rounded-lg overflow-hidden border border-border/30">
+                    <article
+                      key={e.id}
+                      className="relative group min-w-[200px] w-[200px] md:min-w-[240px] md:w-[240px] cursor-pointer snap-start focus-within:ring-2 focus-within:ring-primary rounded-lg"
+                      onClick={() => openResume(e)}
+                    >
+                      <div className="relative aspect-video bg-secondary rounded-lg overflow-hidden border border-border/30 shadow-lg shadow-black/20">
                         {e.poster ? (
-                          <img src={e.poster} alt={e.title} className="w-full h-full object-cover" loading="lazy" />
+                          <img src={e.poster} alt={e.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">No preview</div>
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <Play className="w-10 h-10 text-primary" fill="currentColor" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="bg-primary/95 rounded-full p-3 shadow-xl shadow-primary/40">
+                            <Play className="w-6 h-6 text-primary-foreground" fill="currentColor" />
+                          </div>
                         </div>
                         <button
+                          type="button"
                           onClick={(ev) => { ev.stopPropagation(); dismissResume(e.id); }}
-                          aria-label="Remove from continue watching"
-                          className="absolute top-1 right-1 bg-black/70 hover:bg-destructive rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-label={`Remove ${e.title} from continue watching`}
+                          className="absolute top-1.5 right-1.5 bg-black/75 hover:bg-destructive active:bg-destructive rounded-full p-1.5 transition-colors md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
                         >
-                          <X size={12} className="text-white" />
+                          <X size={14} className="text-white" />
                         </button>
-                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/60">
-                          <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+                        {remaining && (
+                          <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                            {remaining}
+                          </span>
+                        )}
+                        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/60">
+                          <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} aria-label={`${Math.round(pct)}% watched`} />
                         </div>
                       </div>
-                      <p className="mt-2 text-xs font-semibold text-foreground line-clamp-1">{e.title}</p>
-                      <p className="text-[10px] text-muted-foreground">{subtitle}</p>
-                    </div>
+                      <p className="mt-2 text-sm font-semibold text-foreground line-clamp-1">{e.title}</p>
+                      <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+                    </article>
                   );
                 })}
               </div>
