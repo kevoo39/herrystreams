@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import AppFooter from '@/components/AppFooter';
 import VideoPlayer from '@/components/VideoPlayer';
