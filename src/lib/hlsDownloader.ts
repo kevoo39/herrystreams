@@ -99,7 +99,7 @@ export async function downloadHls(
     onProgress({ done: segments.length, total: segments.length, bytes, status: 'finalizing' });
     for (const r of results) chunks.push(r);
 
-    const blob = new Blob(chunks, { type: 'video/mp2t' });
+    const blob = new Blob(chunks as BlobPart[], { type: 'video/mp2t' });
     const a = document.createElement('a');
     const objUrl = URL.createObjectURL(blob);
     a.href = objUrl;
