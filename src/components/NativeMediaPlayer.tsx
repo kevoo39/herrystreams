@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { AlertCircle, Loader2, RefreshCw, Shield, Download, RotateCcw } from 'lucide-react';
+import { AlertCircle, Loader2, RefreshCw, Shield, Download, RotateCcw, X } from 'lucide-react';
 import {
   buildResumeId, getResume, saveResume, getPlayerSettings, savePlayerSettings,
   type ResumeKind,
 } from '@/lib/resume';
+import { downloadHls, type DLProgress } from '@/lib/hlsDownloader';
 
 type Mode =
   | { kind: 'anime'; anilistId: number; episode: number; audioType: 'sub' | 'dub'; malId?: string }
