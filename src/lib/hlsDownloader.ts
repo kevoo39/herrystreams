@@ -6,8 +6,12 @@ export type DLProgress = {
   done: number;
   total: number;
   bytes: number;
-  status: 'parsing' | 'downloading' | 'finalizing' | 'done' | 'error';
+  status: 'parsing' | 'downloading' | 'finalizing' | 'verifying' | 'done' | 'error';
   message?: string;
+  filename?: string;
+  durationMs?: number;
+  blobSize?: number;
+  verified?: boolean;
 };
 
 async function fetchText(url: string): Promise<string> {
