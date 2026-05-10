@@ -20,7 +20,20 @@ const Home = () => {
   const [resume, setResume] = useState<ResumeEntry[]>([]);
 
   useEffect(() => {
-    setResume(getAllResume().slice(0, 10));
+    // Dedupe TV/anime by series — keep only the most recent episode per show
+    const all = getAllResume();
+    const seen = new Set<string>();
+    const deduped: ResumeEntry[] = [];
+    for (const e of all) {
+      const key =
+        e.kind === 'tv' ? `tv:${e.tmdbId}` :
+        e.kind === 'anime' ? `anime:${e.malId ?? e.anilistId}` :
+        `movie:${e.tmdbId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(e);
+    }
+    setResume(deduped.slice(0, 10));
     const load = async () => {
       try {
         const [t, p, tr, np] = await Promise.all([
