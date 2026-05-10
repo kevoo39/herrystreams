@@ -303,7 +303,8 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
                 dlProgress.status === 'parsing' ? 'Preparing download…' :
                 dlProgress.status === 'downloading' ? `Downloading ${dlPct}%` :
                 dlProgress.status === 'finalizing' ? 'Finalizing file…' :
-                dlProgress.status === 'done' ? 'Download ready ✓ (check your downloads)' :
+                dlProgress.status === 'verifying' ? 'Verifying file…' :
+                dlProgress.status === 'done' ? `Saved ✓ ${dlProgress.filename} · ${((dlProgress.blobSize ?? 0)/1024/1024).toFixed(1)} MB · ${((dlProgress.durationMs ?? 0)/1000).toFixed(1)}s` :
                 dlProgress.status === 'error' ? `Failed: ${dlProgress.message}` : ''
               ) : 'Download as a single .ts file (plays in VLC, MX Player, any modern player)'}
             </span>
