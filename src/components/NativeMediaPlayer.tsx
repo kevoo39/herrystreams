@@ -290,48 +290,52 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
       <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-green-400 pointer-events-none">
         <Shield size={10} /> Ad-Free · {currentServerLabel}
       </div>
-      {playlistUrl && !error && (
-        <button
-          onClick={startDownload}
-          disabled={!!dlProgress && dlProgress.status !== 'done' && dlProgress.status !== 'error'}
-          className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-white hover:bg-primary transition-colors disabled:opacity-60"
-          title="Download as a single .ts video file (playable in VLC or any modern player)"
-        >
-          <Download size={10} /> Download
-        </button>
-      )}
-      {dlProgress && (
-        <div className="absolute bottom-16 right-2 z-30 w-64 bg-black/90 backdrop-blur-sm border border-border/40 rounded-lg p-3 text-white">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold">
-              {dlProgress.status === 'parsing' && 'Preparing download…'}
-              {dlProgress.status === 'downloading' && 'Downloading'}
-              {dlProgress.status === 'finalizing' && 'Finalizing…'}
-              {dlProgress.status === 'done' && 'Download ready ✓'}
-              {dlProgress.status === 'error' && 'Download failed'}
+    </div>
+
+    {/* Download bar — rendered OUTSIDE the video so taps are never eaten by native controls */}
+    {playlistUrl && !error && (
+      <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+            <Download size={14} className="text-primary shrink-0" />
+            <span className="truncate">
+              {dlProgress ? (
+                dlProgress.status === 'parsing' ? 'Preparing download…' :
+                dlProgress.status === 'downloading' ? `Downloading ${dlPct}%` :
+                dlProgress.status === 'finalizing' ? 'Finalizing file…' :
+                dlProgress.status === 'done' ? 'Download ready ✓ (check your downloads)' :
+                dlProgress.status === 'error' ? `Failed: ${dlProgress.message}` : ''
+              ) : 'Download as a single .ts file (plays in VLC, MX Player, any modern player)'}
             </span>
-            <button onClick={cancelDownload} className="text-muted-foreground hover:text-white">
-              <X size={14} />
-            </button>
           </div>
-          {dlProgress.total > 0 && (
-            <>
-              <div className="h-1.5 bg-secondary rounded overflow-hidden mb-1">
-                <div
-                  className="h-full bg-primary transition-all"
-                  style={{ width: `${Math.round((dlProgress.done / dlProgress.total) * 100)}%` }}
-                />
-              </div>
-              <div className="text-[10px] text-muted-foreground">
-                {dlProgress.done}/{dlProgress.total} segments · {(dlProgress.bytes / 1024 / 1024).toFixed(1)} MB
-              </div>
-            </>
-          )}
-          {dlProgress.message && (
-            <div className="text-[10px] text-destructive mt-1">{dlProgress.message}</div>
+          {dlBusy ? (
+            <button
+              onClick={cancelDownload}
+              className="flex items-center gap-1 px-3 py-1.5 bg-destructive text-destructive-foreground rounded-md text-xs font-bold shrink-0"
+            >
+              <X size={12} /> Cancel
+            </button>
+          ) : (
+            <button
+              onClick={startDownload}
+              className="flex items-center gap-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-bold shrink-0 hover:opacity-90 active:scale-95 transition"
+            >
+              <Download size={12} /> {dlProgress?.status === 'done' ? 'Download again' : 'Download'}
+            </button>
           )}
         </div>
-      )}
+        {dlProgress && dlProgress.total > 0 && (
+          <>
+            <div className="h-2 bg-background rounded-full overflow-hidden">
+              <div className="h-full bg-primary transition-all" style={{ width: `${dlPct}%` }} />
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              {dlProgress.done}/{dlProgress.total} segments · {(dlProgress.bytes / 1024 / 1024).toFixed(1)} MB
+            </div>
+          </>
+        )}
+      </div>
+    )}
     </div>
   );
 };
