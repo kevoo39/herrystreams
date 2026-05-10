@@ -71,9 +71,17 @@ const Home = () => {
     else navigate(`/anime/${e.malId ?? e.anilistId}?ep=${e.animeEpisode}&audio=${e.audioType ?? 'sub'}`);
   };
 
-  const dismissResume = (id: string) => {
-    removeResume(id);
-    setResume((prev) => prev.filter((e) => e.id !== id));
+  const dismissResume = (entry: ResumeEntry) => {
+    // Remove all entries of this series (every season/episode), not just one
+    const all = getAllResume();
+    for (const e of all) {
+      const same =
+        entry.kind === 'tv' ? e.kind === 'tv' && e.tmdbId === entry.tmdbId :
+        entry.kind === 'anime' ? e.kind === 'anime' && (e.malId ?? e.anilistId) === (entry.malId ?? entry.anilistId) :
+        e.kind === 'movie' && e.tmdbId === entry.tmdbId;
+      if (same) removeResume(e.id);
+    }
+    setResume((prev) => prev.filter((e) => e.id !== entry.id));
   };
 
   const fmtRemaining = (pos: number, dur: number) => {
