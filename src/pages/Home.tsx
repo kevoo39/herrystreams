@@ -20,7 +20,20 @@ const Home = () => {
   const [resume, setResume] = useState<ResumeEntry[]>([]);
 
   useEffect(() => {
-    setResume(getAllResume().slice(0, 10));
+    // Dedupe TV/anime by series — keep only the most recent episode per show
+    const all = getAllResume();
+    const seen = new Set<string>();
+    const deduped: ResumeEntry[] = [];
+    for (const e of all) {
+      const key =
+        e.kind === 'tv' ? `tv:${e.tmdbId}` :
+        e.kind === 'anime' ? `anime:${e.malId ?? e.anilistId}` :
+        `movie:${e.tmdbId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(e);
+    }
+    setResume(deduped.slice(0, 10));
     const load = async () => {
       try {
         const [t, p, tr, np] = await Promise.all([
@@ -58,9 +71,17 @@ const Home = () => {
     else navigate(`/anime/${e.malId ?? e.anilistId}?ep=${e.animeEpisode}&audio=${e.audioType ?? 'sub'}`);
   };
 
-  const dismissResume = (id: string) => {
-    removeResume(id);
-    setResume((prev) => prev.filter((e) => e.id !== id));
+  const dismissResume = (entry: ResumeEntry) => {
+    // Remove all entries of this series (every season/episode), not just one
+    const all = getAllResume();
+    for (const e of all) {
+      const same =
+        entry.kind === 'tv' ? e.kind === 'tv' && e.tmdbId === entry.tmdbId :
+        entry.kind === 'anime' ? e.kind === 'anime' && (e.malId ?? e.anilistId) === (entry.malId ?? entry.anilistId) :
+        e.kind === 'movie' && e.tmdbId === entry.tmdbId;
+      if (same) removeResume(e.id);
+    }
+    setResume((prev) => prev.filter((e) => e.id !== entry.id));
   };
 
   const fmtRemaining = (pos: number, dur: number) => {
@@ -96,16 +117,24 @@ const Home = () => {
                   return (
                     <article
                       key={e.id}
-                      className="relative group min-w-[200px] w-[200px] md:min-w-[240px] md:w-[240px] cursor-pointer snap-start focus-within:ring-2 focus-within:ring-primary rounded-lg"
+                      className="relative group min-w-[140px] w-[140px] md:min-w-[170px] md:w-[170px] cursor-pointer snap-start focus-within:ring-2 focus-within:ring-primary rounded-lg"
                       onClick={() => openResume(e)}
                     >
-                      <div className="relative aspect-video bg-secondary rounded-lg overflow-hidden border border-border/30 shadow-lg shadow-black/20">
+                      <div className="relative aspect-[2/3] bg-secondary rounded-lg overflow-hidden border border-border/30 shadow-lg shadow-black/30">
                         {e.poster ? (
-                          <img src={e.poster} alt={e.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
+                          <img
+                            src={e.poster}
+                            alt={e.title}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            loading="lazy"
+                            onError={(ev) => { (ev.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">No preview</div>
+                          <div className="w-full h-full flex items-center justify-center text-muted-foreground text-[10px] px-2 text-center">
+                            {e.title}
+                          </div>
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" />
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <div className="bg-primary/95 rounded-full p-3 shadow-xl shadow-primary/40">
                             <Play className="w-6 h-6 text-primary-foreground" fill="currentColor" />
@@ -113,14 +142,14 @@ const Home = () => {
                         </div>
                         <button
                           type="button"
-                          onClick={(ev) => { ev.stopPropagation(); dismissResume(e.id); }}
+                          onClick={(ev) => { ev.stopPropagation(); dismissResume(e); }}
                           aria-label={`Remove ${e.title} from continue watching`}
                           className="absolute top-1.5 right-1.5 bg-black/75 hover:bg-destructive active:bg-destructive rounded-full p-1.5 transition-colors md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
                         >
                           <X size={14} className="text-white" />
                         </button>
                         {remaining && (
-                          <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                          <span className="absolute bottom-3 right-2 bg-black/75 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
                             {remaining}
                           </span>
                         )}
