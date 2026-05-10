@@ -57,6 +57,7 @@ export async function downloadHls(
   onProgress: (p: DLProgress) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  const startedAt = performance.now();
   try {
     onProgress({ done: 0, total: 0, bytes: 0, status: 'parsing' });
     const { url: mediaUrl, text } = await resolveMediaPlaylist(playlistUrl);
@@ -104,19 +105,38 @@ export async function downloadHls(
     for (const r of results) chunks.push(r);
 
     const blob = new Blob(chunks as BlobPart[], { type: 'video/mp2t' });
+
+    // Verify blob: non-empty, size matches accumulated bytes, starts with MPEG-TS sync byte 0x47
+    onProgress({ done: segments.length, total: segments.length, bytes, status: 'verifying' });
+    const head = new Uint8Array(await blob.slice(0, 1).arrayBuffer());
+    const sizeOk = blob.size > 0 && blob.size === bytes;
+    const tsOk = head[0] === 0x47;
+    if (!sizeOk) throw new Error(`Blob size mismatch (${blob.size} vs ${bytes})`);
+    if (!tsOk) throw new Error('Invalid MPEG-TS header (first byte not 0x47)');
+
+    const safe = filename.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 80) || 'video';
+    const finalName = `${safe}.ts`;
     const a = document.createElement('a');
     const objUrl = URL.createObjectURL(blob);
     a.href = objUrl;
-    const safe = filename.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 80) || 'video';
-    a.download = `${safe}.ts`;
+    a.download = finalName;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
 
-    onProgress({ done: segments.length, total: segments.length, bytes, status: 'done' });
+    const durationMs = Math.round(performance.now() - startedAt);
+    onProgress({
+      done: segments.length, total: segments.length, bytes, status: 'done',
+      filename: finalName, durationMs, blobSize: blob.size, verified: true,
+    });
   } catch (e: any) {
-    onProgress({ done: 0, total: 0, bytes: 0, status: 'error', message: e?.message || String(e) });
+    onProgress({
+      done: 0, total: 0, bytes: 0, status: 'error',
+      message: e?.message || String(e),
+      durationMs: Math.round(performance.now() - startedAt),
+      verified: false,
+    });
     throw e;
   }
 }
