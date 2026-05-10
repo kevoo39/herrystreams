@@ -236,7 +236,13 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
+  const dlPct = dlProgress && dlProgress.total > 0
+    ? Math.round((dlProgress.done / dlProgress.total) * 100)
+    : 0;
+  const dlBusy = !!dlProgress && dlProgress.status !== 'done' && dlProgress.status !== 'error';
+
   return (
+    <div className="w-full">
     <div className="relative w-full aspect-video bg-background rounded-xl overflow-hidden border border-border/30 shadow-2xl">
       <video
         ref={videoRef}
