@@ -14,6 +14,7 @@ import SearchPage from "./pages/SearchPage";
 import MyList from "./pages/MyList";
 import NotFound from "./pages/NotFound";
 import BottomNav from "./components/BottomNav";
+import PWAInstallPrompt from "./components/PWAInstallPrompt";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ const App = () => (
           <Route path="*" element={<NotFound />} />
         </Routes>
         <BottomNav />
+        <PWAInstallPrompt />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
