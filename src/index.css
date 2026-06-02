@@ -60,6 +60,7 @@
     @apply bg-background text-foreground;
     font-family: 'Barlow', system-ui, sans-serif;
     font-feature-settings: "ss01", "cv11";
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Bebas Neue', 'Barlow', sans-serif;
