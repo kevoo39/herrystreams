@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
-import AppFooter from '@/components/AppFooter';
 import { getMyList, removeFromMyList, ListItem } from '@/lib/myList';
 import { Play, Trash2, Bookmark } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -64,7 +63,6 @@ const MyList = () => {
           </div>
         )}
       </main>
-      <AppFooter />
     </div>
   );
 };

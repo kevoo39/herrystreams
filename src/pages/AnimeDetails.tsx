@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
-import AppFooter from '@/components/AppFooter';
 import VideoPlayer from '@/components/VideoPlayer';
 import { Play, Plus, Star, Calendar, Clock, ChevronLeft, List, Volume2, VolumeX, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -291,7 +290,6 @@ const AnimeDetails = () => {
           </section>
         </main>
       </div>
-      <AppFooter />
     </div>
   );
 };

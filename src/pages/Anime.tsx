@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import Navbar from '@/components/Navbar';
 import AnimeRow from '@/components/AnimeRow';
-import AppFooter from '@/components/AppFooter';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Play, Plus } from 'lucide-react';
@@ -76,7 +75,6 @@ const Anime = () => {
           <AnimeRow title="🏆 Top Rated Classics" animeList={topRated} loading={loading} />
         </div>
       </main>
-      <AppFooter />
     </div>
   );
 };

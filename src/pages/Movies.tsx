@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import ContentRow from '@/components/ContentRow';
-import AppFooter from '@/components/AppFooter';
 import { tmdbService, TMDBMovie } from '@/lib/tmdb';
 import { Star, Play } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -52,7 +51,6 @@ const Movies = () => {
         <ContentRow title="⭐ Top Rated" items={topRated} onItemClick={handleClick} loading={loading} />
         <ContentRow title="🎥 Upcoming" items={upcoming} onItemClick={handleClick} loading={loading} />
       </main>
-      <AppFooter />
     </div>
   );
 };

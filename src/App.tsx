@@ -13,6 +13,7 @@ import TVShowDetails from "./pages/TVShowDetails";
 import SearchPage from "./pages/SearchPage";
 import MyList from "./pages/MyList";
 import NotFound from "./pages/NotFound";
+import BottomNav from "./components/BottomNav";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/my-list" element={<MyList />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <BottomNav />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

@@ -66,37 +66,26 @@ const Navbar = () => {
           <button
             className="md:hidden p-2 text-foreground/70"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label="Toggle search"
           >
-            {isMenuOpen ? <X size={22} /> : <Menu size={22} />}
+            {isMenuOpen ? <X size={22} /> : <Search size={22} />}
           </button>
         </div>
       </div>
 
       {isMenuOpen && (
-        <div className="md:hidden bg-background border-b border-border p-4 space-y-4">
+        <div className="md:hidden bg-background border-b border-border p-4">
           <form onSubmit={handleSearch} className="relative">
             <input
               type="text"
               placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-secondary border border-border rounded-lg py-2.5 pl-9 pr-4 text-sm placeholder:text-muted-foreground"
+              className="w-full bg-secondary border border-border rounded-full py-2.5 pl-9 pr-4 text-sm placeholder:text-muted-foreground"
+              autoFocus
             />
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
           </form>
-          <div className="flex flex-col gap-1">
-            {navItems.map(item => (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={() => setIsMenuOpen(false)}
-                className="px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-secondary transition-colors flex items-center gap-3"
-              >
-                <item.icon size={16} className="text-primary" />
-                {item.label}
-              </Link>
-            ))}
-          </div>
         </div>
       )}
     </nav>

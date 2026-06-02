@@ -5,7 +5,6 @@ import Navbar from '@/components/Navbar';
 import HeroSection from '@/components/HeroSection';
 import ContentRow from '@/components/ContentRow';
 import AnimeRow from '@/components/AnimeRow';
-import AppFooter from '@/components/AppFooter';
 import { tmdbService, TMDBMovie } from '@/lib/tmdb';
 import { getAllResume, removeResume, type ResumeEntry } from '@/lib/resume';
 
@@ -173,7 +172,6 @@ const Home = () => {
           <AnimeRow title="⭐ Popular Anime" animeList={animeData.popular} loading={!animeData.popular.length && loading} />
         </div>
       </main>
-      <AppFooter />
     </div>
   );
 };

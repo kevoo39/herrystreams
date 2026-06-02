@@ -1,79 +1,83 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 7%;
-    --foreground: 0 0% 95%;
+    /* Noir & Gold palette */
+    --background: 0 0% 5%;
+    --foreground: 45 30% 95%;
 
-    --card: 0 0% 10%;
-    --card-foreground: 0 0% 95%;
+    --card: 0 0% 8%;
+    --card-foreground: 45 30% 95%;
 
-    --popover: 0 0% 10%;
-    --popover-foreground: 0 0% 95%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 45 30% 95%;
 
-    --primary: 357 92% 47%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 43 55% 54%;
+    --primary-foreground: 0 0% 5%;
 
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 0 0% 90%;
+    --secondary: 0 0% 11%;
+    --secondary-foreground: 45 20% 88%;
 
-    --muted: 0 0% 18%;
-    --muted-foreground: 0 0% 65%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 45 10% 65%;
 
-    --accent: 340 82% 52%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 43 75% 75%;
+    --accent-foreground: 0 0% 5%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 18%;
-    --input: 0 0% 14%;
-    --ring: 357 92% 47%;
+    --border: 43 25% 18%;
+    --input: 0 0% 11%;
+    --ring: 43 55% 54%;
 
-    --radius: 0.75rem;
+    --radius: 1rem;
 
-    --sidebar-background: 0 0% 8%;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 357 92% 47%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 14%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 0 0% 18%;
-    --sidebar-ring: 357 92% 47%;
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 45 30% 95%;
+    --sidebar-primary: 43 55% 54%;
+    --sidebar-primary-foreground: 0 0% 5%;
+    --sidebar-accent: 0 0% 11%;
+    --sidebar-accent-foreground: 45 30% 95%;
+    --sidebar-border: 43 25% 18%;
+    --sidebar-ring: 43 55% 54%;
 
-    --gradient-hero: linear-gradient(135deg, hsl(0 0% 5%), hsl(0 0% 8%));
-    --gradient-card: linear-gradient(145deg, hsl(0 0% 10%), hsl(0 0% 14%));
-    --gradient-primary: linear-gradient(135deg, hsl(357 92% 47%), hsl(340 82% 52%));
-    --shadow-brand: 0 4px 24px hsl(357 92% 47% / 0.4);
-    --shadow-card: 0 8px 32px hsl(0 0% 0% / 0.5);
+    --gradient-hero: radial-gradient(ellipse at top, hsl(43 55% 54% / 0.15), transparent 60%), linear-gradient(180deg, hsl(0 0% 8%), hsl(0 0% 5%));
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 10%), hsl(0 0% 6%));
+    --gradient-primary: linear-gradient(135deg, hsl(43 75% 60%), hsl(43 55% 45%));
+    --gradient-gold: linear-gradient(135deg, hsl(43 75% 75%), hsl(43 55% 45%));
+    --shadow-brand: 0 8px 32px hsl(43 55% 54% / 0.35);
+    --shadow-card: 0 12px 40px hsl(0 0% 0% / 0.6);
+    --shadow-gold: 0 0 24px hsl(43 75% 60% / 0.3);
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-
+  * { @apply border-border; }
   body {
     @apply bg-background text-foreground;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-feature-settings: "ss01", "cv11";
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
   }
-
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Bebas Neue', 'Barlow', sans-serif;
+    letter-spacing: 0.02em;
   }
 }
 
 @layer utilities {
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .text-gold { color: hsl(var(--primary)); }
+  .bg-gold-gradient { background: var(--gradient-gold); }
+  .text-gold-gradient {
+    background: var(--gradient-gold);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
+  .pb-safe-nav { padding-bottom: calc(6rem + env(safe-area-inset-bottom)); }
 }

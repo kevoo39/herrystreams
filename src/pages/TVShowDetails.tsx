@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
-import AppFooter from '@/components/AppFooter';
 import VideoPlayer from '@/components/VideoPlayer';
 import { tmdbService, TMDBTVShowDetails, TMDBEpisode } from '@/lib/tmdb';
 import { Play, Plus, Star, Calendar, ChevronLeft, ChevronDown, Check } from 'lucide-react';
@@ -209,7 +208,6 @@ const TVShowDetails = () => {
           </section>
         </main>
       </div>
-      <AppFooter />
     </div>
   );
 };
