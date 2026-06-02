@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
-import AppFooter from '@/components/AppFooter';
 import { tmdbService, TMDBMovie, TMDBTVShow } from '@/lib/tmdb';
 import { Search as SearchIcon, Star, Play } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -100,7 +99,6 @@ const SearchPage = () => {
           </div>
         ) : null}
       </main>
-      <AppFooter />
     </div>
   );
 };
