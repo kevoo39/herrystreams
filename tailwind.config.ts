@@ -12,8 +12,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['DM Sans', 'sans-serif'],
-        display: ['Space Grotesk', 'sans-serif'],
+        sans: ['Barlow', 'system-ui', 'sans-serif'],
+        display: ['"Bebas Neue"', 'Barlow', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
