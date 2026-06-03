@@ -153,15 +153,30 @@ Deno.serve(async (req) => {
         if (inline) {
           const supaUrl = Deno.env.get("SUPABASE_URL") ?? "";
           const proxyBase = `${supaUrl}/functions/v1/hls-proxy`;
-          const upstream = await fetch(stream.url, {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-              Referer: stream.referer,
-              Origin: new URL(stream.referer).origin,
-            },
-            redirect: "follow",
-          });
-          if (!upstream.ok) { errors[server] = `playlist ${upstream.status}`; continue; }
+          // Retry master fetch a few times — Deno fetch may use a different
+          // egress IP than the vidnest API call, which causes the IP-locked
+          // token to be rejected. Re-extract on each retry to get a fresh URL.
+          let upstream: Response | null = null;
+          let activeStream = stream;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            upstream = await fetch(activeStream.url, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+                Referer: activeStream.referer,
+                Origin: new URL(activeStream.referer).origin,
+              },
+              redirect: "follow",
+            });
+            if (upstream.ok) break;
+            await upstream.body?.cancel();
+            // Re-extract fresh URL bound to (hopefully) the next outbound IP
+            try {
+              const refreshed = await fetchServer(url);
+              const picked = pickStream(refreshed);
+              if (picked) activeStream = picked;
+            } catch { /* keep prior stream */ }
+          }
+          if (!upstream || !upstream.ok) { errors[server] = `playlist ${upstream?.status ?? "?"}`; continue; }
           const text = await upstream.text();
           const resolvedUrl = upstream.url || stream.url;
           const prefix = getPrefix(resolvedUrl);
