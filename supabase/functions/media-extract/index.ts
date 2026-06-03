@@ -178,13 +178,12 @@ Deno.serve(async (req) => {
           }
           if (!upstream || !upstream.ok) { errors[server] = `playlist ${upstream?.status ?? "?"}`; continue; }
           const text = await upstream.text();
-          const resolvedUrl = upstream.url || stream.url;
+          const resolvedUrl = upstream.url || activeStream.url;
           const prefix = getPrefix(resolvedUrl);
-          // ctx the proxy uses to re-extract & rebuild prefixes on token rejection
           const ctxObj: Record<string, string> = { type, tmdb, server };
           if (type === "tv") { ctxObj.season = season!; ctxObj.episode = episode!; }
           const ctx = btoa(JSON.stringify(ctxObj));
-          const rewritten = rewritePlaylist(text, resolvedUrl, stream.referer, proxyBase, ctx, prefix);
+          const rewritten = rewritePlaylist(text, resolvedUrl, activeStream.referer, proxyBase, ctx, prefix);
           const headers: Record<string, string> = {
             ...corsHeaders,
             "Content-Type": "application/vnd.apple.mpegurl",
