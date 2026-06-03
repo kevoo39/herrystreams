@@ -119,15 +119,21 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
         };
 
         if (Hls.isSupported()) {
-          const hls = new Hls({ enableWorker: true });
+          const hls = new Hls({ enableWorker: true, manifestLoadingTimeOut: 12000, manifestLoadingMaxRetry: 1 });
           hlsRef.current = hls;
           hls.loadSource(proxied);
           hls.attachMedia(video);
           hls.on(Hls.Events.MANIFEST_PARSED, onReady);
           hls.on(Hls.Events.ERROR, (_e, data) => {
             if (data.fatal) {
-              setError(data.details || 'Playback error');
-              setLoading(false);
+              // Auto-advance to next server; if exhausted, fall back to embed.
+              if ((mode.kind === 'movie' || mode.kind === 'tv') && serverIdx < mediaServers.length - 1) {
+                setServerIdx((i) => i + 1);
+              } else {
+                setError(data.details || 'Playback error');
+                setLoading(false);
+                onFallback?.();
+              }
             }
           });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {

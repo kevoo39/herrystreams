@@ -156,7 +156,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             onClick={() => setUseNative(false)}
             className="text-[10px] text-muted-foreground hover:text-primary transition-colors"
           >
-            Switch to embed player
+            Stream not playing? Switch to embed player →
           </button>
           {onNextEpisode && totalEpisodes && currentEp && currentEp < totalEpisodes && (
             <button

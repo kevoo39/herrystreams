@@ -60,13 +60,10 @@ async function fetchServer(url: string) {
 }
 
 function pickStream(payload: any): { url: string; referer: string; language?: string } | null {
-  // Different servers shape responses differently
   const candidates: any[] = [];
   if (Array.isArray(payload?.streams)) candidates.push(...payload.streams);
   if (Array.isArray(payload?.sources)) candidates.push(...payload.sources);
   if (payload?.url) candidates.push({ url: payload.url, headers: payload.headers });
-
-  // Prefer English then any
   const english = candidates.find((s) => (s?.language || "").toLowerCase() === "english");
   const pick = english || candidates.find((s) => s?.url);
   if (!pick) return null;
@@ -76,21 +73,43 @@ function pickStream(payload: any): { url: string; referer: string; language?: st
   return { url, referer, language: pick.language };
 }
 
-function rewritePlaylist(text: string, baseUrl: string, referer: string, proxyBase: string): string {
+// Strip the last path segment to get the "master prefix" used for IP-locked CDNs.
+function getPrefix(u: string): string {
+  return u.replace(/\/[^\/?#]+(?:[?#].*)?$/, "");
+}
+
+// Rewrite playlist lines, mapping URLs that share the master prefix into
+// ctx+path proxy URLs (so hls-proxy can re-mint the token), and falling back
+// to plain url proxy URLs otherwise.
+function rewritePlaylist(
+  text: string,
+  baseUrl: string,
+  referer: string,
+  proxyBase: string,
+  ctx: string,
+  prefix: string,
+): string {
   const base = new URL(baseUrl);
   const lines = text.split(/\r?\n/);
+  const mk = (abs: string) => {
+    if (abs.startsWith(prefix + "/")) {
+      const rest = abs.slice(prefix.length + 1);
+      return `${proxyBase}?ctx=${encodeURIComponent(ctx)}&path=${encodeURIComponent(rest)}&ref=${encodeURIComponent(referer)}`;
+    }
+    return `${proxyBase}?url=${encodeURIComponent(abs)}&ref=${encodeURIComponent(referer)}`;
+  };
   return lines.map((line) => {
     const trimmed = line.trim();
     if (!trimmed) return line;
     if (trimmed.startsWith("#")) {
       return line.replace(/URI="([^"]+)"/g, (_m, u) => {
         const abs = new URL(u, base).toString();
-        return `URI="${proxyBase}?url=${encodeURIComponent(abs)}&ref=${encodeURIComponent(referer)}"`;
+        return `URI="${mk(abs)}"`;
       });
     }
     try {
       const abs = new URL(trimmed, base).toString();
-      return `${proxyBase}?url=${encodeURIComponent(abs)}&ref=${encodeURIComponent(referer)}`;
+      return mk(abs);
     } catch { return line; }
   }).join("\n");
 }
@@ -105,7 +124,7 @@ Deno.serve(async (req) => {
     const season = u.searchParams.get("season");
     const episode = u.searchParams.get("episode");
     const requestedServer = (u.searchParams.get("server") ?? "").toLowerCase();
-    const inline = u.searchParams.get("inline") === "1"; // return rewritten playlist directly
+    const inline = u.searchParams.get("inline") === "1";
 
     if (!tmdb) {
       return new Response(JSON.stringify({ error: "missing tmdb" }), {
@@ -126,33 +145,51 @@ Deno.serve(async (req) => {
     for (const server of order) {
       try {
         const base = type === "tv" ? TV_SERVERS[server] : MOVIE_SERVERS[server];
-        const url = type === "tv"
-          ? `${base}/${tmdb}/${season}/${episode}`
-          : `${base}/${tmdb}`;
+        const url = type === "tv" ? `${base}/${tmdb}/${season}/${episode}` : `${base}/${tmdb}`;
         const payload = await fetchServer(url);
         const stream = pickStream(payload);
         if (!stream) { errors[server] = "no stream"; continue; }
 
         if (inline) {
-          // Same-invocation IP fetch — required because Vidnest tokens are IP-locked.
           const supaUrl = Deno.env.get("SUPABASE_URL") ?? "";
           const proxyBase = `${supaUrl}/functions/v1/hls-proxy`;
-          const upstream = await fetch(stream.url, {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-              Referer: stream.referer,
-              Origin: new URL(stream.referer).origin,
-            },
-            redirect: "follow",
-          });
-          if (!upstream.ok) { errors[server] = `playlist ${upstream.status}`; continue; }
+          // Retry master fetch a few times — Deno fetch may use a different
+          // egress IP than the vidnest API call, which causes the IP-locked
+          // token to be rejected. Re-extract on each retry to get a fresh URL.
+          let upstream: Response | null = null;
+          let activeStream = stream;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            upstream = await fetch(activeStream.url, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+                Referer: activeStream.referer,
+                Origin: new URL(activeStream.referer).origin,
+              },
+              redirect: "follow",
+            });
+            if (upstream.ok) break;
+            await upstream.body?.cancel();
+            // Re-extract fresh URL bound to (hopefully) the next outbound IP
+            try {
+              const refreshed = await fetchServer(url);
+              const picked = pickStream(refreshed);
+              if (picked) activeStream = picked;
+            } catch { /* keep prior stream */ }
+          }
+          if (!upstream || !upstream.ok) { errors[server] = `playlist ${upstream?.status ?? "?"}`; continue; }
           const text = await upstream.text();
-          const rewritten = rewritePlaylist(text, upstream.url || stream.url, stream.referer, proxyBase);
+          const resolvedUrl = upstream.url || activeStream.url;
+          const prefix = getPrefix(resolvedUrl);
+          const ctxObj: Record<string, string> = { type, tmdb, server };
+          if (type === "tv") { ctxObj.season = season!; ctxObj.episode = episode!; }
+          const ctx = btoa(JSON.stringify(ctxObj));
+          const rewritten = rewritePlaylist(text, resolvedUrl, activeStream.referer, proxyBase, ctx, prefix);
           const headers: Record<string, string> = {
             ...corsHeaders,
             "Content-Type": "application/vnd.apple.mpegurl",
             "X-Stream-Server": server,
             "X-Stream-Referer": stream.referer,
+            "X-Stream-Prefix": prefix,
           };
           if (u.searchParams.get("dl") === "1") {
             const safe = (u.searchParams.get("name") || "stream").replace(/[^a-z0-9_\-]+/gi, "_").slice(0, 80);
