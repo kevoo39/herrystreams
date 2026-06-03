@@ -292,6 +292,31 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
       </div>
     </div>
 
+    {/* Server switcher — switch HLS source to dodge ads/broken streams */}
+    {(mode.kind === 'movie' || mode.kind === 'tv') && (
+      <div className="mt-3 flex flex-wrap items-center gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
+        <RefreshCw size={12} className="text-primary shrink-0" />
+        <span className="text-xs font-semibold mr-1">Server</span>
+        <div className="flex flex-wrap gap-1">
+          {mediaServers.map((s, i) => (
+            <button
+              key={s}
+              onClick={() => { if (i !== serverIdx) { setServerIdx(i); } }}
+              className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${
+                i === serverIdx
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-background border border-border/30 text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        {loading && <Loader2 className="w-3 h-3 animate-spin text-primary ml-auto" />}
+        {!loading && !error && <span className="ml-auto text-[10px] text-green-500 font-bold">● Playing</span>}
+      </div>
+    )}
+
     {/* Download bar — rendered OUTSIDE the video so taps are never eaten by native controls */}
     {playlistUrl && !error && (
       <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
