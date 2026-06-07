@@ -12,6 +12,7 @@ import MovieDetails from "./pages/MovieDetails";
 import TVShowDetails from "./pages/TVShowDetails";
 import SearchPage from "./pages/SearchPage";
 import MyList from "./pages/MyList";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import BottomNav from "./components/BottomNav";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/tv/:id" element={<TVShowDetails />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/my-list" element={<MyList />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         <BottomNav />
