@@ -5,7 +5,17 @@ import VideoPlayer from '@/components/VideoPlayer';
 import { Play, Plus, Star, Calendar, Clock, ChevronLeft, List, Volume2, VolumeX, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { fetchAnilistMeta } from '@/lib/malToAnilist';
+
 const EPISODES_PER_PAGE = 100;
+
+// Parse "Episode 13 - My Dream Home" / "Ep. 13: Title" → { num, title }
+function parseAnilistEpTitle(raw: string): { num: number | null; title: string } {
+  if (!raw) return { num: null, title: '' };
+  const m = raw.match(/^\s*(?:episode|ep\.?)\s*(\d+)\s*[-:–—]?\s*(.*)$/i);
+  if (m) return { num: parseInt(m[1]), title: (m[2] || '').trim() };
+  return { num: null, title: raw.trim() };
+}
 
 const AnimeDetails = () => {
   const { id } = useParams();
@@ -18,6 +28,8 @@ const AnimeDetails = () => {
   const [trailerMuted, setTrailerMuted] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalEpisodes, setTotalEpisodes] = useState(0);
+  const [anilistTotal, setAnilistTotal] = useState(0);
+  const [anilistTitles, setAnilistTitles] = useState<Record<number, string>>({});
   const [episodesLoading, setEpisodesLoading] = useState(false);
 
   // Fetch all episode pages from Jikan
@@ -61,6 +73,24 @@ const AnimeDetails = () => {
         // Fetch all episodes (paginated)
         await fetchAllEpisodes(id!);
 
+        // Fallback / supplement with AniList data (better episode counts + titles)
+        try {
+          const meta = await fetchAnilistMeta(id!);
+          if (meta) {
+            const total = meta.episodes
+              ?? (meta.nextAiringEpisode ? meta.nextAiringEpisode.episode - 1 : 0);
+            if (total && total > 0) setAnilistTotal(total);
+
+            const titleMap: Record<number, string> = {};
+            meta.streamingEpisodes.forEach((se, i) => {
+              const { num, title } = parseAnilistEpTitle(se.title);
+              const n = num ?? (i + 1);
+              if (title) titleMap[n] = title;
+            });
+            if (Object.keys(titleMap).length) setAnilistTitles(titleMap);
+          }
+        } catch {}
+
         try {
           await new Promise(r => setTimeout(r, 400));
           const relRes = await fetch(`https://api.jikan.moe/v4/anime/${id}/relations`);
@@ -98,26 +128,39 @@ const AnimeDetails = () => {
     return Math.min(weeks, 60);
   };
 
-  // For episodes without Jikan data, generate placeholder entries
-  const effectiveTotal = totalEpisodes > 0
-    ? totalEpisodes
-    : (anime?.status === 'Currently Airing' || anime?.airing ? estimateAiredCount() : 0);
+  // Prefer the largest reliable source: Jikan list > AniList total > Jikan meta > airing estimate
+  const effectiveTotal = Math.max(
+    episodes.length,
+    anilistTotal,
+    totalEpisodes,
+    (anime?.status === 'Currently Airing' || anime?.airing) ? estimateAiredCount() : 0,
+  );
+
+  const titleFor = (n: number, fallback?: string) =>
+    anilistTitles[n] || fallback || `Episode ${n}`;
 
   const displayEpisodes = (() => {
     if (episodes.length === 0) {
-      return effectiveTotal > 0
-        ? Array.from({ length: effectiveTotal }, (_, i) => ({ mal_id: i + 1, title: `Episode ${i + 1}` }))
-        : anime ? [{ mal_id: 1, title: 'Episode 1' }] : [];
-    }
-    // Top up if airing and Jikan is behind
-    if (effectiveTotal > episodes.length) {
-      const extra = Array.from({ length: effectiveTotal - episodes.length }, (_, i) => ({
-        mal_id: episodes.length + i + 1,
-        title: `Episode ${episodes.length + i + 1}`,
+      const count = effectiveTotal > 0 ? effectiveTotal : (anime ? 1 : 0);
+      return Array.from({ length: count }, (_, i) => ({
+        mal_id: i + 1,
+        title: titleFor(i + 1),
       }));
-      return [...episodes, ...extra];
     }
-    return episodes;
+    // Enrich Jikan episodes with AniList titles when Jikan title is missing/generic
+    const enriched = episodes.map((ep: any) => ({
+      ...ep,
+      title: (ep.title && !/^episode\s*\d+$/i.test(ep.title)) ? ep.title : titleFor(ep.mal_id, ep.title),
+    }));
+    // Top up if AniList/airing knows about more episodes than Jikan returned
+    if (effectiveTotal > enriched.length) {
+      const extra = Array.from({ length: effectiveTotal - enriched.length }, (_, i) => {
+        const n = enriched.length + i + 1;
+        return { mal_id: n, title: titleFor(n) };
+      });
+      return [...enriched, ...extra];
+    }
+    return enriched;
   })();
 
   const totalPages = Math.ceil(displayEpisodes.length / EPISODES_PER_PAGE);
