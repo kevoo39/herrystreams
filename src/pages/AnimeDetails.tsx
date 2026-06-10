@@ -28,6 +28,8 @@ const AnimeDetails = () => {
   const [trailerMuted, setTrailerMuted] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalEpisodes, setTotalEpisodes] = useState(0);
+  const [anilistTotal, setAnilistTotal] = useState(0);
+  const [anilistTitles, setAnilistTitles] = useState<Record<number, string>>({});
   const [episodesLoading, setEpisodesLoading] = useState(false);
 
   // Fetch all episode pages from Jikan
