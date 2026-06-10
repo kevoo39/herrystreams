@@ -54,6 +54,7 @@ const AnimeDetails = () => {
       }
     }
 
+    allEps.sort((a: any, b: any) => (a.mal_id ?? 0) - (b.mal_id ?? 0));
     setEpisodes(allEps);
     setTotalEpisodes(allEps.length);
     setEpisodesLoading(false);
