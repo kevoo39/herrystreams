@@ -28,7 +28,9 @@ const AnimeDetails = () => {
   const [totalEpisodes, setTotalEpisodes] = useState(0);
   const [anilistTotal, setAnilistTotal] = useState(0);
   const [anilistTitles, setAnilistTitles] = useState<Record<number, string>>({});
+  const [anilistMeta, setAnilistMeta] = useState<AniListMeta | null>(null);
   const [episodesLoading, setEpisodesLoading] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
   // Fetch all episode pages from Jikan
   const fetchAllEpisodes = useCallback(async (animeId: string) => {
