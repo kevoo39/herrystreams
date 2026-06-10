@@ -54,59 +54,79 @@ const AnimeDetails = () => {
       }
     }
 
+    allEps.sort((a: any, b: any) => (a.mal_id ?? 0) - (b.mal_id ?? 0));
     setEpisodes(allEps);
     setTotalEpisodes(allEps.length);
     setEpisodesLoading(false);
   }, []);
 
   useEffect(() => {
+    // Reset per-anime state so sequels/prequels never inherit the previous title's data
+    setAnime(null);
+    setEpisodes([]);
+    setTotalEpisodes(0);
+    setAnilistTotal(0);
+    setAnilistTitles({});
+    setRelatedSeasons([]);
+    setSelectedEpisode(null);
+    setCurrentPage(1);
+    setLoading(true);
+
+    let cancelled = false;
+
     const fetchDetails = async () => {
       try {
         const animeRes = await fetch(`https://api.jikan.moe/v4/anime/${id}`);
         const animeData = await animeRes.json();
+        if (cancelled) return;
         setAnime(animeData.data);
 
         // Set total from API data first for quick display
         const apiTotal = animeData.data?.episodes || 0;
         setTotalEpisodes(apiTotal);
 
-        // Fetch all episodes (paginated)
-        await fetchAllEpisodes(id!);
+        // Run Jikan episode pagination and AniList lookup in parallel so AniList
+        // titles arrive even when Jikan stalls or returns only 1 episode.
+        await Promise.all([
+          fetchAllEpisodes(id!).catch(() => {}),
+          (async () => {
+            try {
+              const meta = await fetchAnilistMeta(id!);
+              if (cancelled || !meta) return;
+              const total = meta.episodes
+                ?? (meta.nextAiringEpisode ? meta.nextAiringEpisode.episode - 1 : 0);
+              if (total && total > 0) setAnilistTotal(total);
 
-        // Fallback / supplement with AniList data (better episode counts + titles)
-        try {
-          const meta = await fetchAnilistMeta(id!);
-          if (meta) {
-            const total = meta.episodes
-              ?? (meta.nextAiringEpisode ? meta.nextAiringEpisode.episode - 1 : 0);
-            if (total && total > 0) setAnilistTotal(total);
-
-            const titleMap: Record<number, string> = {};
-            meta.streamingEpisodes.forEach((se, i) => {
-              const { num, title } = parseAnilistEpTitle(se.title);
-              const n = num ?? (i + 1);
-              if (title) titleMap[n] = title;
-            });
-            if (Object.keys(titleMap).length) setAnilistTitles(titleMap);
-          }
-        } catch {}
+              const titleMap: Record<number, string> = {};
+              meta.streamingEpisodes.forEach((se, i) => {
+                const { num, title } = parseAnilistEpTitle(se.title);
+                const n = num ?? (i + 1);
+                if (title) titleMap[n] = title;
+              });
+              if (Object.keys(titleMap).length) setAnilistTitles(titleMap);
+            } catch {}
+          })(),
+        ]);
 
         try {
           await new Promise(r => setTimeout(r, 400));
           const relRes = await fetch(`https://api.jikan.moe/v4/anime/${id}/relations`);
           const relData = await relRes.json();
+          if (cancelled) return;
           const seasons = (relData.data || [])
             .filter((r: any) => ['Sequel', 'Prequel'].includes(r.relation))
             .flatMap((r: any) => r.entry.filter((e: any) => e.type === 'anime').map((e: any) => ({ ...e, relation: r.relation })));
           setRelatedSeasons(seasons);
         } catch {}
       } catch (e) { console.error(e); }
-      finally { setLoading(false); }
+      finally { if (!cancelled) setLoading(false); }
     };
     fetchDetails();
     window.scrollTo(0, 0);
     const epParam = parseInt(searchParams.get('ep') || '');
     if (Number.isFinite(epParam) && epParam > 0) setSelectedEpisode(epParam);
+
+    return () => { cancelled = true; };
   }, [id, fetchAllEpisodes]);
 
   const handleNextEpisode = useCallback(() => {
