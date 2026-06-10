@@ -103,11 +103,22 @@ const AnimeDetails = () => {
     ? totalEpisodes
     : (anime?.status === 'Currently Airing' || anime?.airing ? estimateAiredCount() : 0);
 
-  const displayEpisodes = episodes.length > 0
-    ? episodes
-    : effectiveTotal > 0
-      ? Array.from({ length: effectiveTotal }, (_, i) => ({ mal_id: i + 1, title: `Episode ${i + 1}` }))
-      : anime ? [{ mal_id: 1, title: 'Episode 1' }] : [];
+  const displayEpisodes = (() => {
+    if (episodes.length === 0) {
+      return effectiveTotal > 0
+        ? Array.from({ length: effectiveTotal }, (_, i) => ({ mal_id: i + 1, title: `Episode ${i + 1}` }))
+        : anime ? [{ mal_id: 1, title: 'Episode 1' }] : [];
+    }
+    // Top up if airing and Jikan is behind
+    if (effectiveTotal > episodes.length) {
+      const extra = Array.from({ length: effectiveTotal - episodes.length }, (_, i) => ({
+        mal_id: episodes.length + i + 1,
+        title: `Episode ${episodes.length + i + 1}`,
+      }));
+      return [...episodes, ...extra];
+    }
+    return episodes;
+  })();
 
   const totalPages = Math.ceil(displayEpisodes.length / EPISODES_PER_PAGE);
   const paginatedEpisodes = displayEpisodes.slice(
