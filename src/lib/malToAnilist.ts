@@ -205,7 +205,7 @@ export function buildDisplayEpisodes(input: BuildEpisodesInput): BuildEpisodesRe
     toppedUp = effectiveTotal - enriched.length;
     const extra = Array.from({ length: toppedUp }, (_, i) => {
       const local = enriched.length + i + 1;
-      return { mal_id: local, title: titleFor(local), overallNumber: partStart + local - 1 };
+      return { mal_id: local, title: titleFor(local), aired: undefined as string | undefined, overallNumber: partStart + local - 1 };
     });
     final = [...enriched, ...extra];
   }
