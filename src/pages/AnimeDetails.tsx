@@ -382,7 +382,10 @@ const AnimeDetails = () => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold truncate">{ep.title || `Episode ${ep.mal_id}`}</p>
-                      {ep.aired && <p className="text-[10px] text-muted-foreground">{new Date(ep.aired).toLocaleDateString()}</p>}
+                      <p className="text-[10px] text-muted-foreground">
+                        {partNumber > 1 && <span className="mr-1">Overall Ep {ep.overallNumber}</span>}
+                        {ep.aired && <span>{new Date(ep.aired).toLocaleDateString()}</span>}
+                      </p>
                     </div>
                     <Play size={14} className="text-muted-foreground shrink-0" />
                   </button>
