@@ -305,11 +305,42 @@ const AnimeDetails = () => {
               <div className="flex items-center gap-2">
                 <List size={16} className="text-primary" />
                 <h2 className="text-lg font-bold font-display">Episodes</h2>
+                {partNumber > 1 && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-primary/10 text-primary rounded border border-primary/20">
+                    Part {partNumber} · Overall Ep {partStart}-{partStart + displayEpisodes.length - 1}
+                  </span>
+                )}
               </div>
-              <span className="text-[10px] font-bold px-2 py-1 bg-secondary rounded border border-border/30">
-                {displayEpisodes.length} Total
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowDebug(v => !v)}
+                  title="Show episode data source"
+                  className={`p-1.5 rounded border text-[10px] font-bold transition-colors ${showDebug ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-secondary border-border/30 text-muted-foreground hover:text-foreground'}`}
+                >
+                  <Bug size={12} />
+                </button>
+                <span className="text-[10px] font-bold px-2 py-1 bg-secondary rounded border border-border/30">
+                  {displayEpisodes.length} Total
+                </span>
+              </div>
             </div>
+
+            {showDebug && (
+              <div className="mb-4 p-3 rounded-lg border border-border/40 bg-secondary/30 text-[11px] font-mono space-y-1">
+                <div><span className="text-muted-foreground">source:</span> <span className="text-primary font-bold">{built.source}</span></div>
+                <div><span className="text-muted-foreground">reason:</span> {built.reason}</div>
+                <div className="grid grid-cols-2 gap-x-4">
+                  <div><span className="text-muted-foreground">jikan eps:</span> {episodes.length}</div>
+                  <div><span className="text-muted-foreground">jikan total:</span> {totalEpisodes}</div>
+                  <div><span className="text-muted-foreground">anilist total:</span> {anilistTotal}</div>
+                  <div><span className="text-muted-foreground">anilist titles:</span> {Object.keys(anilistTitles).length}</div>
+                  <div><span className="text-muted-foreground">airing est:</span> {(anime?.status === 'Currently Airing' || anime?.airing) ? estimateAiredCount() : 0}</div>
+                  <div><span className="text-muted-foreground">effective:</span> {effectiveTotal}</div>
+                  <div><span className="text-muted-foreground">part:</span> {partNumber} (offset {partStart})</div>
+                  <div><span className="text-muted-foreground">anilist cache:</span> {anilistMeta?.source ?? 'n/a'}</div>
+                </div>
+              </div>
+            )}
 
             {/* Page selector for long series */}
             {totalPages > 1 && (
