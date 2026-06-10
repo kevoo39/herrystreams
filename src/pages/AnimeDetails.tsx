@@ -1,21 +1,19 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import VideoPlayer from '@/components/VideoPlayer';
-import { Play, Plus, Star, Calendar, Clock, ChevronLeft, List, Volume2, VolumeX, ChevronDown } from 'lucide-react';
+import { Play, Plus, Star, Calendar, Clock, ChevronLeft, List, Volume2, VolumeX, Bug } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { fetchAnilistMeta } from '@/lib/malToAnilist';
+import {
+  fetchAnilistMeta,
+  parseAnilistEpTitle,
+  detectPartNumber,
+  buildDisplayEpisodes,
+  type AniListMeta,
+} from '@/lib/malToAnilist';
 
 const EPISODES_PER_PAGE = 100;
-
-// Parse "Episode 13 - My Dream Home" / "Ep. 13: Title" → { num, title }
-function parseAnilistEpTitle(raw: string): { num: number | null; title: string } {
-  if (!raw) return { num: null, title: '' };
-  const m = raw.match(/^\s*(?:episode|ep\.?)\s*(\d+)\s*[-:–—]?\s*(.*)$/i);
-  if (m) return { num: parseInt(m[1]), title: (m[2] || '').trim() };
-  return { num: null, title: raw.trim() };
-}
 
 const AnimeDetails = () => {
   const { id } = useParams();
@@ -30,7 +28,9 @@ const AnimeDetails = () => {
   const [totalEpisodes, setTotalEpisodes] = useState(0);
   const [anilistTotal, setAnilistTotal] = useState(0);
   const [anilistTitles, setAnilistTitles] = useState<Record<number, string>>({});
+  const [anilistMeta, setAnilistMeta] = useState<AniListMeta | null>(null);
   const [episodesLoading, setEpisodesLoading] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
   // Fetch all episode pages from Jikan
   const fetchAllEpisodes = useCallback(async (animeId: string) => {
@@ -67,6 +67,7 @@ const AnimeDetails = () => {
     setTotalEpisodes(0);
     setAnilistTotal(0);
     setAnilistTitles({});
+    setAnilistMeta(null);
     setRelatedSeasons([]);
     setSelectedEpisode(null);
     setCurrentPage(1);
@@ -93,6 +94,7 @@ const AnimeDetails = () => {
             try {
               const meta = await fetchAnilistMeta(id!);
               if (cancelled || !meta) return;
+              setAnilistMeta(meta);
               const total = meta.episodes
                 ?? (meta.nextAiringEpisode ? meta.nextAiringEpisode.episode - 1 : 0);
               if (total && total > 0) setAnilistTotal(total);
@@ -148,40 +150,24 @@ const AnimeDetails = () => {
     return Math.min(weeks, 60);
   };
 
-  // Prefer the largest reliable source: Jikan list > AniList total > Jikan meta > airing estimate
-  const effectiveTotal = Math.max(
-    episodes.length,
+  // Part/Cour detection drives overall episode numbering for Season X Part Y splits.
+  const partNumber = useMemo(() => detectPartNumber(anime?.title), [anime?.title]);
+  // Heuristic: Part N starts at (N-1) * episodes-in-Part-1. We don't always know
+  // Part 1's length, so default to the current Part's episode count as the offset
+  // when we have no better signal. Users only see the per-Part list anyway.
+  const partStart = partNumber > 1 ? ((partNumber - 1) * Math.max(episodes.length, anilistTotal, 12)) + 1 : 1;
+
+  const built = useMemo(() => buildDisplayEpisodes({
+    jikanEpisodes: episodes,
     anilistTotal,
-    totalEpisodes,
-    (anime?.status === 'Currently Airing' || anime?.airing) ? estimateAiredCount() : 0,
-  );
+    anilistTitles,
+    estimatedAiring: (anime?.status === 'Currently Airing' || anime?.airing) ? estimateAiredCount() : 0,
+    jikanReportedTotal: totalEpisodes,
+    partStart,
+  }), [episodes, anilistTotal, anilistTitles, anime, totalEpisodes, partStart]);
 
-  const titleFor = (n: number, fallback?: string) =>
-    anilistTitles[n] || fallback || `Episode ${n}`;
-
-  const displayEpisodes = (() => {
-    if (episodes.length === 0) {
-      const count = effectiveTotal > 0 ? effectiveTotal : (anime ? 1 : 0);
-      return Array.from({ length: count }, (_, i) => ({
-        mal_id: i + 1,
-        title: titleFor(i + 1),
-      }));
-    }
-    // Enrich Jikan episodes with AniList titles when Jikan title is missing/generic
-    const enriched = episodes.map((ep: any) => ({
-      ...ep,
-      title: (ep.title && !/^episode\s*\d+$/i.test(ep.title)) ? ep.title : titleFor(ep.mal_id, ep.title),
-    }));
-    // Top up if AniList/airing knows about more episodes than Jikan returned
-    if (effectiveTotal > enriched.length) {
-      const extra = Array.from({ length: effectiveTotal - enriched.length }, (_, i) => {
-        const n = enriched.length + i + 1;
-        return { mal_id: n, title: titleFor(n) };
-      });
-      return [...enriched, ...extra];
-    }
-    return enriched;
-  })();
+  const displayEpisodes = built.episodes;
+  const effectiveTotal = built.effectiveTotal;
 
   const totalPages = Math.ceil(displayEpisodes.length / EPISODES_PER_PAGE);
   const paginatedEpisodes = displayEpisodes.slice(
@@ -319,11 +305,42 @@ const AnimeDetails = () => {
               <div className="flex items-center gap-2">
                 <List size={16} className="text-primary" />
                 <h2 className="text-lg font-bold font-display">Episodes</h2>
+                {partNumber > 1 && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-primary/10 text-primary rounded border border-primary/20">
+                    Part {partNumber} · Overall Ep {partStart}-{partStart + displayEpisodes.length - 1}
+                  </span>
+                )}
               </div>
-              <span className="text-[10px] font-bold px-2 py-1 bg-secondary rounded border border-border/30">
-                {displayEpisodes.length} Total
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowDebug(v => !v)}
+                  title="Show episode data source"
+                  className={`p-1.5 rounded border text-[10px] font-bold transition-colors ${showDebug ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-secondary border-border/30 text-muted-foreground hover:text-foreground'}`}
+                >
+                  <Bug size={12} />
+                </button>
+                <span className="text-[10px] font-bold px-2 py-1 bg-secondary rounded border border-border/30">
+                  {displayEpisodes.length} Total
+                </span>
+              </div>
             </div>
+
+            {showDebug && (
+              <div className="mb-4 p-3 rounded-lg border border-border/40 bg-secondary/30 text-[11px] font-mono space-y-1">
+                <div><span className="text-muted-foreground">source:</span> <span className="text-primary font-bold">{built.source}</span></div>
+                <div><span className="text-muted-foreground">reason:</span> {built.reason}</div>
+                <div className="grid grid-cols-2 gap-x-4">
+                  <div><span className="text-muted-foreground">jikan eps:</span> {episodes.length}</div>
+                  <div><span className="text-muted-foreground">jikan total:</span> {totalEpisodes}</div>
+                  <div><span className="text-muted-foreground">anilist total:</span> {anilistTotal}</div>
+                  <div><span className="text-muted-foreground">anilist titles:</span> {Object.keys(anilistTitles).length}</div>
+                  <div><span className="text-muted-foreground">airing est:</span> {(anime?.status === 'Currently Airing' || anime?.airing) ? estimateAiredCount() : 0}</div>
+                  <div><span className="text-muted-foreground">effective:</span> {effectiveTotal}</div>
+                  <div><span className="text-muted-foreground">part:</span> {partNumber} (offset {partStart})</div>
+                  <div><span className="text-muted-foreground">anilist cache:</span> {anilistMeta?.source ?? 'n/a'}</div>
+                </div>
+              </div>
+            )}
 
             {/* Page selector for long series */}
             {totalPages > 1 && (
@@ -365,7 +382,10 @@ const AnimeDetails = () => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold truncate">{ep.title || `Episode ${ep.mal_id}`}</p>
-                      {ep.aired && <p className="text-[10px] text-muted-foreground">{new Date(ep.aired).toLocaleDateString()}</p>}
+                      <p className="text-[10px] text-muted-foreground">
+                        {partNumber > 1 && <span className="mr-1">Overall Ep {ep.overallNumber}</span>}
+                        {ep.aired && <span>{new Date(ep.aired).toLocaleDateString()}</span>}
+                      </p>
                     </div>
                     <Play size={14} className="text-muted-foreground shrink-0" />
                   </button>
