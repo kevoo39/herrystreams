@@ -67,6 +67,7 @@ const AnimeDetails = () => {
     setTotalEpisodes(0);
     setAnilistTotal(0);
     setAnilistTitles({});
+    setAnilistMeta(null);
     setRelatedSeasons([]);
     setSelectedEpisode(null);
     setCurrentPage(1);
