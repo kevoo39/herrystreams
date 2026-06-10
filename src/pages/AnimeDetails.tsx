@@ -1,21 +1,19 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import VideoPlayer from '@/components/VideoPlayer';
-import { Play, Plus, Star, Calendar, Clock, ChevronLeft, List, Volume2, VolumeX, ChevronDown } from 'lucide-react';
+import { Play, Plus, Star, Calendar, Clock, ChevronLeft, List, Volume2, VolumeX, Bug } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { fetchAnilistMeta } from '@/lib/malToAnilist';
+import {
+  fetchAnilistMeta,
+  parseAnilistEpTitle,
+  detectPartNumber,
+  buildDisplayEpisodes,
+  type AniListMeta,
+} from '@/lib/malToAnilist';
 
 const EPISODES_PER_PAGE = 100;
-
-// Parse "Episode 13 - My Dream Home" / "Ep. 13: Title" → { num, title }
-function parseAnilistEpTitle(raw: string): { num: number | null; title: string } {
-  if (!raw) return { num: null, title: '' };
-  const m = raw.match(/^\s*(?:episode|ep\.?)\s*(\d+)\s*[-:–—]?\s*(.*)$/i);
-  if (m) return { num: parseInt(m[1]), title: (m[2] || '').trim() };
-  return { num: null, title: raw.trim() };
-}
 
 const AnimeDetails = () => {
   const { id } = useParams();
