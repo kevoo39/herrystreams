@@ -94,6 +94,7 @@ const AnimeDetails = () => {
             try {
               const meta = await fetchAnilistMeta(id!);
               if (cancelled || !meta) return;
+              setAnilistMeta(meta);
               const total = meta.episodes
                 ?? (meta.nextAiringEpisode ? meta.nextAiringEpisode.episode - 1 : 0);
               if (total && total > 0) setAnilistTotal(total);
