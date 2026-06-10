@@ -150,40 +150,24 @@ const AnimeDetails = () => {
     return Math.min(weeks, 60);
   };
 
-  // Prefer the largest reliable source: Jikan list > AniList total > Jikan meta > airing estimate
-  const effectiveTotal = Math.max(
-    episodes.length,
+  // Part/Cour detection drives overall episode numbering for Season X Part Y splits.
+  const partNumber = useMemo(() => detectPartNumber(anime?.title), [anime?.title]);
+  // Heuristic: Part N starts at (N-1) * episodes-in-Part-1. We don't always know
+  // Part 1's length, so default to the current Part's episode count as the offset
+  // when we have no better signal. Users only see the per-Part list anyway.
+  const partStart = partNumber > 1 ? ((partNumber - 1) * Math.max(episodes.length, anilistTotal, 12)) + 1 : 1;
+
+  const built = useMemo(() => buildDisplayEpisodes({
+    jikanEpisodes: episodes,
     anilistTotal,
-    totalEpisodes,
-    (anime?.status === 'Currently Airing' || anime?.airing) ? estimateAiredCount() : 0,
-  );
+    anilistTitles,
+    estimatedAiring: (anime?.status === 'Currently Airing' || anime?.airing) ? estimateAiredCount() : 0,
+    jikanReportedTotal: totalEpisodes,
+    partStart,
+  }), [episodes, anilistTotal, anilistTitles, anime, totalEpisodes, partStart]);
 
-  const titleFor = (n: number, fallback?: string) =>
-    anilistTitles[n] || fallback || `Episode ${n}`;
-
-  const displayEpisodes = (() => {
-    if (episodes.length === 0) {
-      const count = effectiveTotal > 0 ? effectiveTotal : (anime ? 1 : 0);
-      return Array.from({ length: count }, (_, i) => ({
-        mal_id: i + 1,
-        title: titleFor(i + 1),
-      }));
-    }
-    // Enrich Jikan episodes with AniList titles when Jikan title is missing/generic
-    const enriched = episodes.map((ep: any) => ({
-      ...ep,
-      title: (ep.title && !/^episode\s*\d+$/i.test(ep.title)) ? ep.title : titleFor(ep.mal_id, ep.title),
-    }));
-    // Top up if AniList/airing knows about more episodes than Jikan returned
-    if (effectiveTotal > enriched.length) {
-      const extra = Array.from({ length: effectiveTotal - enriched.length }, (_, i) => {
-        const n = enriched.length + i + 1;
-        return { mal_id: n, title: titleFor(n) };
-      });
-      return [...enriched, ...extra];
-    }
-    return enriched;
-  })();
+  const displayEpisodes = built.episodes;
+  const effectiveTotal = built.effectiveTotal;
 
   const totalPages = Math.ceil(displayEpisodes.length / EPISODES_PER_PAGE);
   const paginatedEpisodes = displayEpisodes.slice(
