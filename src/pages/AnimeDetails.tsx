@@ -73,6 +73,24 @@ const AnimeDetails = () => {
         // Fetch all episodes (paginated)
         await fetchAllEpisodes(id!);
 
+        // Fallback / supplement with AniList data (better episode counts + titles)
+        try {
+          const meta = await fetchAnilistMeta(id!);
+          if (meta) {
+            const total = meta.episodes
+              ?? (meta.nextAiringEpisode ? meta.nextAiringEpisode.episode - 1 : 0);
+            if (total && total > 0) setAnilistTotal(total);
+
+            const titleMap: Record<number, string> = {};
+            meta.streamingEpisodes.forEach((se, i) => {
+              const { num, title } = parseAnilistEpTitle(se.title);
+              const n = num ?? (i + 1);
+              if (title) titleMap[n] = title;
+            });
+            if (Object.keys(titleMap).length) setAnilistTitles(titleMap);
+          }
+        } catch {}
+
         try {
           await new Promise(r => setTimeout(r, 400));
           const relRes = await fetch(`https://api.jikan.moe/v4/anime/${id}/relations`);
