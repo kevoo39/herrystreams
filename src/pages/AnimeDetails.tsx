@@ -89,12 +89,36 @@ const AnimeDetails = () => {
     }
   }, [selectedEpisode, episodes]);
 
+  // Estimate episode count for currently-airing series with no Jikan data
+  const estimateAiredCount = () => {
+    const from = anime?.aired?.from ? new Date(anime.aired.from).getTime() : 0;
+    if (!from) return 0;
+    const to = anime?.aired?.to ? new Date(anime.aired.to).getTime() : Date.now();
+    const weeks = Math.max(1, Math.floor((to - from) / (7 * 24 * 60 * 60 * 1000)) + 1);
+    return Math.min(weeks, 60);
+  };
+
   // For episodes without Jikan data, generate placeholder entries
-  const displayEpisodes = episodes.length > 0
-    ? episodes
-    : totalEpisodes > 0
-      ? Array.from({ length: totalEpisodes }, (_, i) => ({ mal_id: i + 1, title: `Episode ${i + 1}` }))
-      : [];
+  const effectiveTotal = totalEpisodes > 0
+    ? totalEpisodes
+    : (anime?.status === 'Currently Airing' || anime?.airing ? estimateAiredCount() : 0);
+
+  const displayEpisodes = (() => {
+    if (episodes.length === 0) {
+      return effectiveTotal > 0
+        ? Array.from({ length: effectiveTotal }, (_, i) => ({ mal_id: i + 1, title: `Episode ${i + 1}` }))
+        : anime ? [{ mal_id: 1, title: 'Episode 1' }] : [];
+    }
+    // Top up if airing and Jikan is behind
+    if (effectiveTotal > episodes.length) {
+      const extra = Array.from({ length: effectiveTotal - episodes.length }, (_, i) => ({
+        mal_id: episodes.length + i + 1,
+        title: `Episode ${episodes.length + i + 1}`,
+      }));
+      return [...episodes, ...extra];
+    }
+    return episodes;
+  })();
 
   const totalPages = Math.ceil(displayEpisodes.length / EPISODES_PER_PAGE);
   const paginatedEpisodes = displayEpisodes.slice(
