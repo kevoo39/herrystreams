@@ -128,26 +128,39 @@ const AnimeDetails = () => {
     return Math.min(weeks, 60);
   };
 
-  // For episodes without Jikan data, generate placeholder entries
-  const effectiveTotal = totalEpisodes > 0
-    ? totalEpisodes
-    : (anime?.status === 'Currently Airing' || anime?.airing ? estimateAiredCount() : 0);
+  // Prefer the largest reliable source: Jikan list > AniList total > Jikan meta > airing estimate
+  const effectiveTotal = Math.max(
+    episodes.length,
+    anilistTotal,
+    totalEpisodes,
+    (anime?.status === 'Currently Airing' || anime?.airing) ? estimateAiredCount() : 0,
+  );
+
+  const titleFor = (n: number, fallback?: string) =>
+    anilistTitles[n] || fallback || `Episode ${n}`;
 
   const displayEpisodes = (() => {
     if (episodes.length === 0) {
-      return effectiveTotal > 0
-        ? Array.from({ length: effectiveTotal }, (_, i) => ({ mal_id: i + 1, title: `Episode ${i + 1}` }))
-        : anime ? [{ mal_id: 1, title: 'Episode 1' }] : [];
-    }
-    // Top up if airing and Jikan is behind
-    if (effectiveTotal > episodes.length) {
-      const extra = Array.from({ length: effectiveTotal - episodes.length }, (_, i) => ({
-        mal_id: episodes.length + i + 1,
-        title: `Episode ${episodes.length + i + 1}`,
+      const count = effectiveTotal > 0 ? effectiveTotal : (anime ? 1 : 0);
+      return Array.from({ length: count }, (_, i) => ({
+        mal_id: i + 1,
+        title: titleFor(i + 1),
       }));
-      return [...episodes, ...extra];
     }
-    return episodes;
+    // Enrich Jikan episodes with AniList titles when Jikan title is missing/generic
+    const enriched = episodes.map((ep: any) => ({
+      ...ep,
+      title: (ep.title && !/^episode\s*\d+$/i.test(ep.title)) ? ep.title : titleFor(ep.mal_id, ep.title),
+    }));
+    // Top up if AniList/airing knows about more episodes than Jikan returned
+    if (effectiveTotal > enriched.length) {
+      const extra = Array.from({ length: effectiveTotal - enriched.length }, (_, i) => {
+        const n = enriched.length + i + 1;
+        return { mal_id: n, title: titleFor(n) };
+      });
+      return [...enriched, ...extra];
+    }
+    return enriched;
   })();
 
   const totalPages = Math.ceil(displayEpisodes.length / EPISODES_PER_PAGE);
