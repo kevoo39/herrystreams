@@ -147,7 +147,7 @@ export interface BuildEpisodesInput {
 }
 
 export interface BuildEpisodesResult {
-  episodes: { mal_id: number; title: string; aired?: string; overallNumber: number }[];
+  episodes: { mal_id: number; title: string; aired?: string | undefined; overallNumber: number }[];
   source: 'jikan' | 'anilist' | 'mixed' | 'estimated' | 'empty';
   reason: string;
   effectiveTotal: number;
