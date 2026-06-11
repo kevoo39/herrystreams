@@ -379,7 +379,30 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     )}
 
     {/* Download bar — rendered OUTSIDE the video so taps are never eaten by native controls */}
-    {playlistUrl && !error && (
+    {mp4Url && !error ? (
+      <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+            <Download size={14} className="text-primary shrink-0" />
+            <span className="truncate">
+              Direct MP4 {mp4Label ? `(${mp4Label})` : ''} — one-tap download, plays anywhere
+            </span>
+          </div>
+          <a
+            href={loading ? undefined : `${mp4Url}&dl=1&name=${encodeURIComponent(title)}`}
+            aria-disabled={loading}
+            onClick={(e) => { if (loading) e.preventDefault(); }}
+            download={`${title.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 80) || 'video'}.mp4`}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold shrink-0 transition ${
+              loading ? 'bg-secondary text-muted-foreground pointer-events-none opacity-60'
+                      : 'bg-primary text-primary-foreground hover:opacity-90 active:scale-95'
+            }`}
+          >
+            <Download size={12} /> {loading ? 'Loading…' : 'Download MP4'}
+          </a>
+        </div>
+      </div>
+    ) : playlistUrl && !error && (
       <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
