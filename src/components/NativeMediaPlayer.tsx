@@ -33,6 +33,8 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [playlistUrl, setPlaylistUrl] = useState<string | null>(null);
+  const [mp4Url, setMp4Url] = useState<string | null>(null);
+  const [mp4Label, setMp4Label] = useState<string | null>(null);
   const [serverIdx, setServerIdx] = useState(0);
   const [resumePromptAt, setResumePromptAt] = useState<number | null>(null);
 
