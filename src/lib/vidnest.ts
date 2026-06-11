@@ -26,6 +26,12 @@ const SERVERS: StreamServer[] = [
     buildAnimeUrl: (id, ep, type) => `https://vidnest.fun/anime/${id}/${ep}/${type}`,
   },
   {
+    name: 'Vidzen',
+    buildMovieUrl: (id) => `https://vidzen.fun/movie/${id}`,
+    buildTVUrl: (id, s, e) => `https://vidzen.fun/tv/${id}/${s}/${e}`,
+    buildAnimeUrl: (id, ep, type) => `https://vidzen.fun/anime/${id}/${ep}/${type}`,
+  },
+  {
     name: 'Backup',
     buildMovieUrl: (id) => `https://vidsrc.to/embed/movie/${id}`,
     buildTVUrl: (id, s, e) => `https://vidsrc.to/embed/tv/${id}/${s}/${e}`,
