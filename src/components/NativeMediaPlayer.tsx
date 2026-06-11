@@ -23,7 +23,9 @@ const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 const APIKEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const animeServers: ('aniwave' | 'anitaku')[] = ['aniwave', 'anitaku'];
-const mediaServers = ['allmovies', 'moviebox', 'catflix', 'flixhq', 'vidlink'];
+const mediaServers = ['vidzen', 'allmovies', 'moviebox', 'catflix', 'flixhq', 'vidlink'];
+
+const isMp4Server = (s: string) => s === 'vidzen';
 
 const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, poster, onFallback }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -31,6 +33,8 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [playlistUrl, setPlaylistUrl] = useState<string | null>(null);
+  const [mp4Url, setMp4Url] = useState<string | null>(null);
+  const [mp4Label, setMp4Label] = useState<string | null>(null);
   const [serverIdx, setServerIdx] = useState(0);
   const [resumePromptAt, setResumePromptAt] = useState<number | null>(null);
 
@@ -72,14 +76,71 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     setLoading(true);
     setError(null);
     setPlaylistUrl(null);
+    setMp4Url(null);
+    setMp4Label(null);
 
     const load = async () => {
       try {
+        const currentServer = mode.kind === 'anime'
+          ? animeServers[serverIdx % animeServers.length]
+          : mediaServers[serverIdx % mediaServers.length];
+
+        // === MP4 branch (Vidzen): native progressive playback via our proxy ===
+        if ((mode.kind === 'movie' || mode.kind === 'tv') && isMp4Server(currentServer)) {
+          const params = new URLSearchParams({
+            type: mode.kind,
+            tmdb: String(mode.kind === 'movie' ? mode.tmdbId : mode.tmdbId),
+          });
+          if (mode.kind === 'tv') {
+            params.set('season', String(mode.season));
+            params.set('episode', String(mode.episode));
+          }
+          const extractRes = await fetch(`${FN_BASE}/vidzen-extract?${params}`, {
+            headers: { apikey: APIKEY },
+          });
+          if (!extractRes.ok) throw new Error(`vidzen ${extractRes.status}`);
+          const data = await extractRes.json();
+          if (!data?.url) throw new Error('Vidzen returned no MP4');
+
+          // Route MP4 through our edge so the URL is OURS — no ads, no redirects
+          const proxiedMp4 = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(data.url)}&apikey=${APIKEY}`;
+          if (cancelled) return;
+          setMp4Url(proxiedMp4);
+          setMp4Label(data.label || null);
+
+          const video = videoRef.current;
+          if (!video) return;
+          const settings = getPlayerSettings();
+          video.volume = settings.volume;
+          video.muted = settings.muted;
+          video.playbackRate = settings.playbackRate;
+          if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+
+          video.src = proxiedMp4;
+          const onReady = () => {
+            setLoading(false);
+            const saved = getResume(resumeId);
+            if (saved && saved.position > 30 && saved.duration > 0 && saved.position < saved.duration * 0.95) {
+              setResumePromptAt(saved.position);
+            } else {
+              video.play().catch(() => {});
+            }
+          };
+          video.addEventListener('loadedmetadata', onReady, { once: true });
+          video.addEventListener('error', () => {
+            if (cancelled) return;
+            // Auto-advance on MP4 failure
+            if (serverIdx < mediaServers.length - 1) setServerIdx((i) => i + 1);
+            else { setError('MP4 playback failed'); setLoading(false); onFallback?.(); }
+          }, { once: true });
+          return;
+        }
+
+        // === HLS branch (existing servers) ===
         let proxied = '';
         if (mode.kind === 'anime') {
-          const server = animeServers[serverIdx % animeServers.length];
           const res = await fetch(
-            `${FN_BASE}/anime-extract?anilist=${mode.anilistId}&ep=${mode.episode}&type=${mode.audioType}&server=${server}`,
+            `${FN_BASE}/anime-extract?anilist=${mode.anilistId}&ep=${mode.episode}&type=${mode.audioType}&server=${currentServer}`,
             { headers: { apikey: APIKEY } }
           );
           if (!res.ok) throw new Error(`extract ${res.status}`);
@@ -87,7 +148,6 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           if (!payload?.url) throw new Error('No stream URL');
           proxied = `${FN_BASE}/hls-proxy?url=${encodeURIComponent(payload.url)}&ref=${encodeURIComponent(payload.referer || '')}`;
         } else {
-          // Inline mode for movies/TV — avoids IP-locked-token issue
           const inline = buildPlaylistUrl(serverIdx);
           if (!inline) throw new Error('Cannot build playlist');
           proxied = inline;
@@ -98,18 +158,14 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
 
         const video = videoRef.current;
         if (!video) return;
-
-        // Apply persisted settings
         const settings = getPlayerSettings();
         video.volume = settings.volume;
         video.muted = settings.muted;
         video.playbackRate = settings.playbackRate;
-
         if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
 
         const onReady = () => {
           setLoading(false);
-          // Offer resume if we have a saved position > 30s and < 95% through
           const saved = getResume(resumeId);
           if (saved && saved.position > 30 && saved.duration > 0 && saved.position < saved.duration * 0.95) {
             setResumePromptAt(saved.position);
@@ -126,7 +182,6 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           hls.on(Hls.Events.MANIFEST_PARSED, onReady);
           hls.on(Hls.Events.ERROR, (_e, data) => {
             if (data.fatal) {
-              // Auto-advance to next server; if exhausted, fall back to embed.
               if ((mode.kind === 'movie' || mode.kind === 'tv') && serverIdx < mediaServers.length - 1) {
                 setServerIdx((i) => i + 1);
               } else {
@@ -294,7 +349,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
         </div>
       )}
       <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-green-400 pointer-events-none">
-        <Shield size={10} /> Ad-Free · {currentServerLabel}
+        <Shield size={10} /> Ad-Free · {currentServerLabel}{mp4Url && mp4Label ? ` · ${mp4Label}` : ''}{mp4Url ? ' · MP4' : ''}
       </div>
     </div>
 
@@ -324,7 +379,30 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     )}
 
     {/* Download bar — rendered OUTSIDE the video so taps are never eaten by native controls */}
-    {playlistUrl && !error && (
+    {mp4Url && !error ? (
+      <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+            <Download size={14} className="text-primary shrink-0" />
+            <span className="truncate">
+              Direct MP4 {mp4Label ? `(${mp4Label})` : ''} — one-tap download, plays anywhere
+            </span>
+          </div>
+          <a
+            href={loading ? undefined : `${mp4Url}&dl=1&name=${encodeURIComponent(title)}`}
+            aria-disabled={loading}
+            onClick={(e) => { if (loading) e.preventDefault(); }}
+            download={`${title.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 80) || 'video'}.mp4`}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold shrink-0 transition ${
+              loading ? 'bg-secondary text-muted-foreground pointer-events-none opacity-60'
+                      : 'bg-primary text-primary-foreground hover:opacity-90 active:scale-95'
+            }`}
+          >
+            <Download size={12} /> {loading ? 'Loading…' : 'Download MP4'}
+          </a>
+        </div>
+      </div>
+    ) : playlistUrl && !error && (
       <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
