@@ -349,7 +349,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
         </div>
       )}
       <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-green-400 pointer-events-none">
-        <Shield size={10} /> Ad-Free · {currentServerLabel}
+        <Shield size={10} /> Ad-Free · {currentServerLabel}{mp4Url && mp4Label ? ` · ${mp4Label}` : ''}{mp4Url ? ' · MP4' : ''}
       </div>
     </div>
 
