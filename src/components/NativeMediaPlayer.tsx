@@ -23,7 +23,9 @@ const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 const APIKEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const animeServers: ('aniwave' | 'anitaku')[] = ['aniwave', 'anitaku'];
-const mediaServers = ['allmovies', 'moviebox', 'catflix', 'flixhq', 'vidlink'];
+const mediaServers = ['vidzen', 'allmovies', 'moviebox', 'catflix', 'flixhq', 'vidlink'];
+
+const isMp4Server = (s: string) => s === 'vidzen';
 
 const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, poster, onFallback }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
