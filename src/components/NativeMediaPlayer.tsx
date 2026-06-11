@@ -76,14 +76,71 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     setLoading(true);
     setError(null);
     setPlaylistUrl(null);
+    setMp4Url(null);
+    setMp4Label(null);
 
     const load = async () => {
       try {
+        const currentServer = mode.kind === 'anime'
+          ? animeServers[serverIdx % animeServers.length]
+          : mediaServers[serverIdx % mediaServers.length];
+
+        // === MP4 branch (Vidzen): native progressive playback via our proxy ===
+        if ((mode.kind === 'movie' || mode.kind === 'tv') && isMp4Server(currentServer)) {
+          const params = new URLSearchParams({
+            type: mode.kind,
+            tmdb: String(mode.kind === 'movie' ? mode.tmdbId : mode.tmdbId),
+          });
+          if (mode.kind === 'tv') {
+            params.set('season', String(mode.season));
+            params.set('episode', String(mode.episode));
+          }
+          const extractRes = await fetch(`${FN_BASE}/vidzen-extract?${params}`, {
+            headers: { apikey: APIKEY },
+          });
+          if (!extractRes.ok) throw new Error(`vidzen ${extractRes.status}`);
+          const data = await extractRes.json();
+          if (!data?.url) throw new Error('Vidzen returned no MP4');
+
+          // Route MP4 through our edge so the URL is OURS — no ads, no redirects
+          const proxiedMp4 = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(data.url)}&apikey=${APIKEY}`;
+          if (cancelled) return;
+          setMp4Url(proxiedMp4);
+          setMp4Label(data.label || null);
+
+          const video = videoRef.current;
+          if (!video) return;
+          const settings = getPlayerSettings();
+          video.volume = settings.volume;
+          video.muted = settings.muted;
+          video.playbackRate = settings.playbackRate;
+          if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+
+          video.src = proxiedMp4;
+          const onReady = () => {
+            setLoading(false);
+            const saved = getResume(resumeId);
+            if (saved && saved.position > 30 && saved.duration > 0 && saved.position < saved.duration * 0.95) {
+              setResumePromptAt(saved.position);
+            } else {
+              video.play().catch(() => {});
+            }
+          };
+          video.addEventListener('loadedmetadata', onReady, { once: true });
+          video.addEventListener('error', () => {
+            if (cancelled) return;
+            // Auto-advance on MP4 failure
+            if (serverIdx < mediaServers.length - 1) setServerIdx((i) => i + 1);
+            else { setError('MP4 playback failed'); setLoading(false); onFallback?.(); }
+          }, { once: true });
+          return;
+        }
+
+        // === HLS branch (existing servers) ===
         let proxied = '';
         if (mode.kind === 'anime') {
-          const server = animeServers[serverIdx % animeServers.length];
           const res = await fetch(
-            `${FN_BASE}/anime-extract?anilist=${mode.anilistId}&ep=${mode.episode}&type=${mode.audioType}&server=${server}`,
+            `${FN_BASE}/anime-extract?anilist=${mode.anilistId}&ep=${mode.episode}&type=${mode.audioType}&server=${currentServer}`,
             { headers: { apikey: APIKEY } }
           );
           if (!res.ok) throw new Error(`extract ${res.status}`);
@@ -91,7 +148,6 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           if (!payload?.url) throw new Error('No stream URL');
           proxied = `${FN_BASE}/hls-proxy?url=${encodeURIComponent(payload.url)}&ref=${encodeURIComponent(payload.referer || '')}`;
         } else {
-          // Inline mode for movies/TV — avoids IP-locked-token issue
           const inline = buildPlaylistUrl(serverIdx);
           if (!inline) throw new Error('Cannot build playlist');
           proxied = inline;
@@ -102,18 +158,14 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
 
         const video = videoRef.current;
         if (!video) return;
-
-        // Apply persisted settings
         const settings = getPlayerSettings();
         video.volume = settings.volume;
         video.muted = settings.muted;
         video.playbackRate = settings.playbackRate;
-
         if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
 
         const onReady = () => {
           setLoading(false);
-          // Offer resume if we have a saved position > 30s and < 95% through
           const saved = getResume(resumeId);
           if (saved && saved.position > 30 && saved.duration > 0 && saved.position < saved.duration * 0.95) {
             setResumePromptAt(saved.position);
@@ -130,7 +182,6 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           hls.on(Hls.Events.MANIFEST_PARSED, onReady);
           hls.on(Hls.Events.ERROR, (_e, data) => {
             if (data.fatal) {
-              // Auto-advance to next server; if exhausted, fall back to embed.
               if ((mode.kind === 'movie' || mode.kind === 'tv') && serverIdx < mediaServers.length - 1) {
                 setServerIdx((i) => i + 1);
               } else {
