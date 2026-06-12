@@ -314,24 +314,37 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     : 0;
   const dlBusy = !!dlProgress && dlProgress.status !== 'done' && dlProgress.status !== 'error';
 
+  const badge = [
+    currentServerLabel,
+    mp4Label || undefined,
+    mp4Url ? 'MP4' : undefined,
+  ].filter(Boolean).join(' · ');
+
   return (
     <div className="w-full">
-    <div className="relative w-full aspect-video bg-background rounded-xl overflow-hidden border border-border/30 shadow-2xl">
+    <div ref={containerRef} className="relative w-full aspect-video bg-background rounded-xl overflow-hidden border border-border/30 shadow-2xl">
       <video
         ref={videoRef}
-        controls
         playsInline
         poster={poster}
         className="w-full h-full bg-black"
         title={title}
       />
+      {!loading && !error && (
+        <KevStreamControls
+          videoRef={videoRef}
+          containerRef={containerRef}
+          title={title}
+          badge={badge}
+        />
+      )}
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 pointer-events-none">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       )}
       {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background p-4">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background p-4 z-30">
           <AlertCircle className="w-8 h-8 text-destructive" />
           <p className="text-xs text-muted-foreground text-center">Stream failed: {error}</p>
           <div className="flex gap-2 flex-wrap justify-center">
@@ -360,9 +373,6 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           <button onClick={dismissResume} className="px-2 py-1 rounded bg-secondary text-[10px] font-bold">Start over</button>
         </div>
       )}
-      <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-green-400 pointer-events-none">
-        <Shield size={10} /> Ad-Free · {currentServerLabel}{mp4Url && mp4Label ? ` · ${mp4Label}` : ''}{mp4Url ? ' · MP4' : ''}
-      </div>
     </div>
 
     {/* Server switcher — switch HLS source to dodge ads/broken streams */}
