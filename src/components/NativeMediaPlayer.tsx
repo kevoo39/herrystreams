@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { AlertCircle, Loader2, RefreshCw, Shield, Download, RotateCcw, X } from 'lucide-react';
+import { AlertCircle, Loader2, RefreshCw, Download, RotateCcw, X } from 'lucide-react';
 import {
   buildResumeId, getResume, saveResume, getPlayerSettings, savePlayerSettings,
   type ResumeKind,
 } from '@/lib/resume';
 import { downloadHls, type DLProgress } from '@/lib/hlsDownloader';
+import KevStreamControls from './KevStreamControls';
 
 type Mode =
   | { kind: 'anime'; anilistId: number; episode: number; audioType: 'sub' | 'dub'; malId?: string }
@@ -29,6 +30,7 @@ const isMp4Server = (s: string) => s === 'vidzen';
 
 const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, poster, onFallback }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,11 +87,12 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           ? animeServers[serverIdx % animeServers.length]
           : mediaServers[serverIdx % mediaServers.length];
 
-        // === MP4 branch (Vidzen): native progressive playback via our proxy ===
+        // === Vidzen branch: extract real stream (MP4 for movies, HLS for TV) ===
+        let proxied = '';
         if ((mode.kind === 'movie' || mode.kind === 'tv') && isMp4Server(currentServer)) {
           const params = new URLSearchParams({
             type: mode.kind,
-            tmdb: String(mode.kind === 'movie' ? mode.tmdbId : mode.tmdbId),
+            tmdb: String(mode.tmdbId),
           });
           if (mode.kind === 'tv') {
             params.set('season', String(mode.season));
@@ -100,57 +103,66 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           });
           if (!extractRes.ok) throw new Error(`vidzen ${extractRes.status}`);
           const data = await extractRes.json();
-          if (!data?.url) throw new Error('Vidzen returned no MP4');
+          if (!data?.url) throw new Error('Vidzen returned no stream');
 
-          // Route MP4 through our edge so the URL is OURS — no ads, no redirects
-          const proxiedMp4 = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(data.url)}&apikey=${APIKEY}`;
-          if (cancelled) return;
-          setMp4Url(proxiedMp4);
-          setMp4Label(data.label || null);
+          const isHlsStream = data.type === 'hls' || /\.m3u8(\?|$)/.test(data.url);
 
-          const video = videoRef.current;
-          if (!video) return;
-          const settings = getPlayerSettings();
-          video.volume = settings.volume;
-          video.muted = settings.muted;
-          video.playbackRate = settings.playbackRate;
-          if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
-
-          video.src = proxiedMp4;
-          const onReady = () => {
-            setLoading(false);
-            const saved = getResume(resumeId);
-            if (saved && saved.position > 30 && saved.duration > 0 && saved.position < saved.duration * 0.95) {
-              setResumePromptAt(saved.position);
-            } else {
-              video.play().catch(() => {});
-            }
-          };
-          video.addEventListener('loadedmetadata', onReady, { once: true });
-          video.addEventListener('error', () => {
+          if (!isHlsStream) {
+            // Direct MP4 — route through our edge so the URL is OURS: no ads, no redirects
+            const proxiedMp4 = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(data.url)}&apikey=${APIKEY}`;
             if (cancelled) return;
-            // Auto-advance on MP4 failure
-            if (serverIdx < mediaServers.length - 1) setServerIdx((i) => i + 1);
-            else { setError('MP4 playback failed'); setLoading(false); onFallback?.(); }
-          }, { once: true });
-          return;
+            setMp4Url(proxiedMp4);
+            setMp4Label(data.label || null);
+
+            const video = videoRef.current;
+            if (!video) return;
+            const settings = getPlayerSettings();
+            video.volume = settings.volume;
+            video.muted = settings.muted;
+            video.playbackRate = settings.playbackRate;
+            if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+
+            video.src = proxiedMp4;
+            const onReady = () => {
+              setLoading(false);
+              const saved = getResume(resumeId);
+              if (saved && saved.position > 30 && saved.duration > 0 && saved.position < saved.duration * 0.95) {
+                setResumePromptAt(saved.position);
+              } else {
+                video.play().catch(() => {});
+              }
+            };
+            video.addEventListener('loadedmetadata', onReady, { once: true });
+            video.addEventListener('error', () => {
+              if (cancelled) return;
+              // Auto-advance on MP4 failure
+              if (serverIdx < mediaServers.length - 1) setServerIdx((i) => i + 1);
+              else { setError('MP4 playback failed'); setLoading(false); onFallback?.(); }
+            }, { once: true });
+            return;
+          }
+
+          // Vidzen HLS (TV shows) — proxy the playlist through our edge for ad-free HLS.js playback
+          setMp4Label(data.label && data.label !== 'Auto' ? data.label : null);
+          proxied = `${FN_BASE}/hls-proxy?url=${encodeURIComponent(data.url)}&ref=${encodeURIComponent('https://vidzen.fun/')}`;
         }
 
-        // === HLS branch (existing servers) ===
-        let proxied = '';
-        if (mode.kind === 'anime') {
-          const res = await fetch(
-            `${FN_BASE}/anime-extract?anilist=${mode.anilistId}&ep=${mode.episode}&type=${mode.audioType}&server=${currentServer}`,
-            { headers: { apikey: APIKEY } }
-          );
-          if (!res.ok) throw new Error(`extract ${res.status}`);
-          const payload = await res.json();
-          if (!payload?.url) throw new Error('No stream URL');
-          proxied = `${FN_BASE}/hls-proxy?url=${encodeURIComponent(payload.url)}&ref=${encodeURIComponent(payload.referer || '')}`;
-        } else {
-          const inline = buildPlaylistUrl(serverIdx);
-          if (!inline) throw new Error('Cannot build playlist');
-          proxied = inline;
+        // === HLS branch ===
+        if (!proxied) {
+          if (mode.kind === 'anime') {
+            const res = await fetch(
+              `${FN_BASE}/anime-extract?anilist=${mode.anilistId}&ep=${mode.episode}&type=${mode.audioType}&server=${currentServer}`,
+              { headers: { apikey: APIKEY } }
+            );
+            if (!res.ok) throw new Error(`extract ${res.status}`);
+            const payload = await res.json();
+            if (!payload?.url) throw new Error('No stream URL');
+            proxied = `${FN_BASE}/hls-proxy?url=${encodeURIComponent(payload.url)}&ref=${encodeURIComponent(payload.referer || '')}`;
+          } else {
+            const inline = buildPlaylistUrl(serverIdx);
+            if (!inline) throw new Error('Cannot build playlist');
+            proxied = inline;
+          }
         }
 
         if (cancelled) return;
