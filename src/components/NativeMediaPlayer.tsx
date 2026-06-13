@@ -109,10 +109,12 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           const isHlsStream = data.type === 'hls' || /\.m3u8(\?|$)/.test(data.url);
 
           if (!isHlsStream) {
-            // Direct MP4 — route through our edge so the URL is OURS: no ads, no redirects
-            const proxiedMp4 = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(data.url)}&apikey=${APIKEY}`;
+            // Direct MP4 from Vidzen CDN — open CORS, supports Range, no ads in the bytes.
+            // Playing the direct URL is dramatically faster than streaming through our proxy.
+            // The proxy is still used for the Download button so users get a friendly filename.
+            const directMp4 = data.url as string;
             if (cancelled) return;
-            setMp4Url(proxiedMp4);
+            setMp4Url(directMp4);
             setMp4Label(data.label || null);
 
             const video = videoRef.current;
@@ -123,7 +125,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
             video.playbackRate = settings.playbackRate;
             if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
 
-            video.src = proxiedMp4;
+            video.src = directMp4;
             const onReady = () => {
               setLoading(false);
               const saved = getResume(resumeId);
@@ -136,9 +138,16 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
             video.addEventListener('loadedmetadata', onReady, { once: true });
             video.addEventListener('error', () => {
               if (cancelled) return;
-              // Auto-advance on MP4 failure
-              if (serverIdx < mediaServers.length - 1) setServerIdx((i) => i + 1);
-              else { setError('MP4 playback failed'); setLoading(false); onFallback?.(); }
+              // Fall back to proxied MP4 (in case the CDN blocks the user's network)
+              const proxiedMp4 = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(directMp4)}&apikey=${APIKEY}`;
+              if (video.src === proxiedMp4) {
+                setError('MP4 playback failed'); setLoading(false); onFallback?.();
+                return;
+              }
+              video.src = proxiedMp4;
+              video.addEventListener('error', () => {
+                setError('MP4 playback failed'); setLoading(false); onFallback?.();
+              }, { once: true });
             }, { once: true });
             return;
           }
