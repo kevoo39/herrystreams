@@ -408,7 +408,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
             </span>
           </div>
           <a
-            href={loading ? undefined : `${mp4Url}&dl=1&name=${encodeURIComponent(title)}`}
+            href={loading ? undefined : `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(mp4Url)}&dl=1&name=${encodeURIComponent(title)}&apikey=${APIKEY}`}
             aria-disabled={loading}
             onClick={(e) => { if (loading) e.preventDefault(); }}
             download={`${title.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 80) || 'video'}.mp4`}
