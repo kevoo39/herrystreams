@@ -24,7 +24,8 @@ const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 const APIKEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const animeServers: ('aniwave' | 'anitaku')[] = ['aniwave', 'anitaku'];
-const mediaServers = ['vidzen', 'allmovies', 'moviebox', 'catflix', 'flixhq', 'vidlink'];
+// Ad-free native pipeline supports Vidzen only (direct MP4 for movies, HLS for TV).
+const mediaServers = ['vidzen'];
 
 const isMp4Server = (s: string) => s === 'vidzen';
 
@@ -108,10 +109,12 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           const isHlsStream = data.type === 'hls' || /\.m3u8(\?|$)/.test(data.url);
 
           if (!isHlsStream) {
-            // Direct MP4 — route through our edge so the URL is OURS: no ads, no redirects
-            const proxiedMp4 = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(data.url)}&apikey=${APIKEY}`;
+            // Direct MP4 from Vidzen CDN — open CORS, supports Range, no ads in the bytes.
+            // Playing the direct URL is dramatically faster than streaming through our proxy.
+            // The proxy is still used for the Download button so users get a friendly filename.
+            const directMp4 = data.url as string;
             if (cancelled) return;
-            setMp4Url(proxiedMp4);
+            setMp4Url(directMp4);
             setMp4Label(data.label || null);
 
             const video = videoRef.current;
@@ -122,7 +125,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
             video.playbackRate = settings.playbackRate;
             if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
 
-            video.src = proxiedMp4;
+            video.src = directMp4;
             const onReady = () => {
               setLoading(false);
               const saved = getResume(resumeId);
@@ -135,9 +138,16 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
             video.addEventListener('loadedmetadata', onReady, { once: true });
             video.addEventListener('error', () => {
               if (cancelled) return;
-              // Auto-advance on MP4 failure
-              if (serverIdx < mediaServers.length - 1) setServerIdx((i) => i + 1);
-              else { setError('MP4 playback failed'); setLoading(false); onFallback?.(); }
+              // Fall back to proxied MP4 (in case the CDN blocks the user's network)
+              const proxiedMp4 = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(directMp4)}&apikey=${APIKEY}`;
+              if (video.src === proxiedMp4) {
+                setError('MP4 playback failed'); setLoading(false); onFallback?.();
+                return;
+              }
+              video.src = proxiedMp4;
+              video.addEventListener('error', () => {
+                setError('MP4 playback failed'); setLoading(false); onFallback?.();
+              }, { once: true });
             }, { once: true });
             return;
           }
@@ -375,26 +385,13 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
       )}
     </div>
 
-    {/* Server switcher — switch HLS source to dodge ads/broken streams */}
+    {/* Status pill — Vidzen is the only ad-free server */}
     {(mode.kind === 'movie' || mode.kind === 'tv') && (
-      <div className="mt-3 flex flex-wrap items-center gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
-        <RefreshCw size={12} className="text-primary shrink-0" />
-        <span className="text-xs font-semibold mr-1">Server</span>
-        <div className="flex flex-wrap gap-1">
-          {mediaServers.map((s, i) => (
-            <button
-              key={s}
-              onClick={() => { if (i !== serverIdx) { setServerIdx(i); } }}
-              className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${
-                i === serverIdx
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-background border border-border/30 text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+      <div className="mt-3 flex items-center gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
+        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-md bg-primary text-primary-foreground">
+          Vidzen · Ad-free
+        </span>
+        <span className="text-[11px] text-muted-foreground">Native player, direct stream</span>
         {loading && <Loader2 className="w-3 h-3 animate-spin text-primary ml-auto" />}
         {!loading && !error && <span className="ml-auto text-[10px] text-green-500 font-bold">● Playing</span>}
       </div>
@@ -411,7 +408,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
             </span>
           </div>
           <a
-            href={loading ? undefined : `${mp4Url}&dl=1&name=${encodeURIComponent(title)}`}
+            href={loading ? undefined : `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(mp4Url)}&dl=1&name=${encodeURIComponent(title)}&apikey=${APIKEY}`}
             aria-disabled={loading}
             onClick={(e) => { if (loading) e.preventDefault(); }}
             download={`${title.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 80) || 'video'}.mp4`}
