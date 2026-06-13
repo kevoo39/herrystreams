@@ -24,7 +24,8 @@ const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 const APIKEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const animeServers: ('aniwave' | 'anitaku')[] = ['aniwave', 'anitaku'];
-const mediaServers = ['vidzen', 'allmovies', 'moviebox', 'catflix', 'flixhq', 'vidlink'];
+// Ad-free native pipeline supports Vidzen only (direct MP4 for movies, HLS for TV).
+const mediaServers = ['vidzen'];
 
 const isMp4Server = (s: string) => s === 'vidzen';
 
