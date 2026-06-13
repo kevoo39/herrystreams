@@ -124,17 +124,22 @@ const KevStreamControls: React.FC<KevStreamControlsProps> = ({
     poke();
   };
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     const el = containerRef.current;
     const v = videoRef.current as any;
     if (!el) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    } else if (el.requestFullscreen) {
-      el.requestFullscreen().catch(() => {});
-    } else if (v?.webkitEnterFullscreen) {
-      v.webkitEnterFullscreen(); // iOS Safari
-    }
+    try {
+      if (document.fullscreenElement) {
+        try { (screen.orientation as any)?.unlock?.(); } catch { /* ignore */ }
+        await document.exitFullscreen().catch(() => {});
+      } else if (el.requestFullscreen) {
+        await el.requestFullscreen().catch(() => {});
+        // Auto-rotate to landscape on mobile (best-effort; ignored on desktop/iOS)
+        try { await (screen.orientation as any)?.lock?.('landscape'); } catch { /* ignore */ }
+      } else if (v?.webkitEnterFullscreen) {
+        v.webkitEnterFullscreen(); // iOS Safari — system handles rotation
+      }
+    } catch { /* ignore */ }
     poke();
   };
 
