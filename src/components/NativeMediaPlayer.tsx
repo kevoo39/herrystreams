@@ -385,26 +385,13 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
       )}
     </div>
 
-    {/* Server switcher — switch HLS source to dodge ads/broken streams */}
+    {/* Status pill — Vidzen is the only ad-free server */}
     {(mode.kind === 'movie' || mode.kind === 'tv') && (
-      <div className="mt-3 flex flex-wrap items-center gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
-        <RefreshCw size={12} className="text-primary shrink-0" />
-        <span className="text-xs font-semibold mr-1">Server</span>
-        <div className="flex flex-wrap gap-1">
-          {mediaServers.map((s, i) => (
-            <button
-              key={s}
-              onClick={() => { if (i !== serverIdx) { setServerIdx(i); } }}
-              className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${
-                i === serverIdx
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-background border border-border/30 text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+      <div className="mt-3 flex items-center gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
+        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-md bg-primary text-primary-foreground">
+          Vidzen · Ad-free
+        </span>
+        <span className="text-[11px] text-muted-foreground">Native player, direct stream</span>
         {loading && <Loader2 className="w-3 h-3 animate-spin text-primary ml-auto" />}
         {!loading && !error && <span className="ml-auto text-[10px] text-green-500 font-bold">● Playing</span>}
       </div>
