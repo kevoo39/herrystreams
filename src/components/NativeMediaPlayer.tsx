@@ -308,6 +308,36 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     };
   }, [resumeId, title, poster, mode]);
 
+  // Auto-recover from stalls on unstable networks: if the video stays waiting
+  // for >12s, nudge it (seek to currentTime) to force a fresh segment request.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    const onWaiting = () => {
+      clear();
+      timer = setTimeout(() => {
+        try {
+          const t = v.currentTime;
+          v.currentTime = Math.max(0, t - 0.1);
+          v.play().catch(() => {});
+        } catch { /* ignore */ }
+      }, 12000);
+    };
+    const onPlaying = () => clear();
+    v.addEventListener('waiting', onWaiting);
+    v.addEventListener('playing', onPlaying);
+    v.addEventListener('canplay', onPlaying);
+    return () => {
+      clear();
+      v.removeEventListener('waiting', onWaiting);
+      v.removeEventListener('playing', onPlaying);
+      v.removeEventListener('canplay', onPlaying);
+    };
+  }, [playlistUrl, mp4Url]);
+
+
   const tryNextServer = () => setServerIdx((i) => i + 1);
   const currentServerLabel =
     mode.kind === 'anime'
