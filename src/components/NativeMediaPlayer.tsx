@@ -326,24 +326,34 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
   };
 
   const [dlProgress, setDlProgress] = useState<DLProgress | null>(null);
+  const [mp4Progress, setMp4Progress] = useState<MP4Progress | null>(null);
   const dlAbortRef = useRef<AbortController | null>(null);
 
   const startDownload = async () => {
-    if (!playlistUrl) return;
     if (dlProgress && dlProgress.status !== 'done' && dlProgress.status !== 'error') return;
+    if (mp4Progress && mp4Progress.status !== 'done' && mp4Progress.status !== 'error') return;
     const ctrl = new AbortController();
     dlAbortRef.current = ctrl;
-    setDlProgress({ done: 0, total: 0, bytes: 0, status: 'parsing' });
-    try {
-      await downloadHls(playlistUrl, title, setDlProgress, ctrl.signal);
-    } catch {
-      // progress already set to error
+
+    // Prefer MP4 downloader when we have a direct MP4 URL — routes through
+    // mp4-proxy so we get a friendly filename, Range-chunked with retries.
+    if (mp4Url) {
+      const proxied = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(mp4Url)}&dl=1&name=${encodeURIComponent(title)}&apikey=${APIKEY}`;
+      setMp4Progress({ bytes: 0, total: 0, status: 'starting' });
+      try { await downloadMp4(proxied, title, setMp4Progress, ctrl.signal); } catch { /* progress set */ }
+      return;
     }
+
+    if (!playlistUrl) return;
+    setDlProgress({ done: 0, total: 0, bytes: 0, status: 'parsing' });
+    try { await downloadHls(playlistUrl, title, setDlProgress, ctrl.signal); } catch { /* progress set */ }
   };
   const cancelDownload = () => {
     dlAbortRef.current?.abort();
     setDlProgress(null);
+    setMp4Progress(null);
   };
+
 
   const fmt = (s: number) => {
     if (!Number.isFinite(s)) return '';
