@@ -129,12 +129,14 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
             params.set('season', String(mode.season));
             params.set('episode', String(mode.episode));
           }
-          const extractRes = await fetch(`${FN_BASE}/vidzen-extract?${params}`, {
-            headers: { apikey: APIKEY },
-          });
-          if (!extractRes.ok) throw new Error(`vidzen ${extractRes.status}`);
+          const extractRes = await fetchWithRetry(
+            `${FN_BASE}/vidzen-extract?${params}`,
+            { headers: { apikey: APIKEY } },
+            { retries: 3, timeoutMs: 15000 },
+          );
           const data = await extractRes.json();
           if (!data?.url) throw new Error('Vidzen returned no stream');
+
 
           const isHlsStream = data.type === 'hls' || /\.m3u8(\?|$)/.test(data.url);
 
