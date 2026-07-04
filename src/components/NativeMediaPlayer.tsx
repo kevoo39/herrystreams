@@ -6,7 +6,37 @@ import {
   type ResumeKind,
 } from '@/lib/resume';
 import { downloadHls, type DLProgress } from '@/lib/hlsDownloader';
+import { downloadMp4, type MP4Progress } from '@/lib/mp4Downloader';
 import KevStreamControls from './KevStreamControls';
+
+// Fetch with timeout + retries, resilient to flaky mobile networks.
+async function fetchWithRetry(url: string, init: RequestInit = {}, opts: { retries?: number; timeoutMs?: number } = {}) {
+  const retries = opts.retries ?? 3;
+  const timeoutMs = opts.timeoutMs ?? 12000;
+  let lastErr: unknown;
+  for (let i = 0; i <= retries; i++) {
+    const ctrl = new AbortController();
+    const combinedSignal = init.signal
+      ? (() => { const c = new AbortController();
+          init.signal!.addEventListener('abort', () => c.abort(), { once: true });
+          ctrl.signal.addEventListener('abort', () => c.abort(), { once: true });
+          return c.signal; })()
+      : ctrl.signal;
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: combinedSignal });
+      clearTimeout(t);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res;
+    } catch (e) {
+      clearTimeout(t);
+      lastErr = e;
+      if (i < retries) await new Promise((r) => setTimeout(r, 400 * Math.pow(2, i)));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
 
 type Mode =
   | { kind: 'anime'; anilistId: number; episode: number; audioType: 'sub' | 'dub'; malId?: string }
@@ -99,12 +129,14 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
             params.set('season', String(mode.season));
             params.set('episode', String(mode.episode));
           }
-          const extractRes = await fetch(`${FN_BASE}/vidzen-extract?${params}`, {
-            headers: { apikey: APIKEY },
-          });
-          if (!extractRes.ok) throw new Error(`vidzen ${extractRes.status}`);
+          const extractRes = await fetchWithRetry(
+            `${FN_BASE}/vidzen-extract?${params}`,
+            { headers: { apikey: APIKEY } },
+            { retries: 3, timeoutMs: 15000 },
+          );
           const data = await extractRes.json();
           if (!data?.url) throw new Error('Vidzen returned no stream');
+
 
           const isHlsStream = data.type === 'hls' || /\.m3u8(\?|$)/.test(data.url);
 
@@ -276,6 +308,36 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     };
   }, [resumeId, title, poster, mode]);
 
+  // Auto-recover from stalls on unstable networks: if the video stays waiting
+  // for >12s, nudge it (seek to currentTime) to force a fresh segment request.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    const onWaiting = () => {
+      clear();
+      timer = setTimeout(() => {
+        try {
+          const t = v.currentTime;
+          v.currentTime = Math.max(0, t - 0.1);
+          v.play().catch(() => {});
+        } catch { /* ignore */ }
+      }, 12000);
+    };
+    const onPlaying = () => clear();
+    v.addEventListener('waiting', onWaiting);
+    v.addEventListener('playing', onPlaying);
+    v.addEventListener('canplay', onPlaying);
+    return () => {
+      clear();
+      v.removeEventListener('waiting', onWaiting);
+      v.removeEventListener('playing', onPlaying);
+      v.removeEventListener('canplay', onPlaying);
+    };
+  }, [playlistUrl, mp4Url]);
+
+
   const tryNextServer = () => setServerIdx((i) => i + 1);
   const currentServerLabel =
     mode.kind === 'anime'
@@ -294,24 +356,34 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
   };
 
   const [dlProgress, setDlProgress] = useState<DLProgress | null>(null);
+  const [mp4Progress, setMp4Progress] = useState<MP4Progress | null>(null);
   const dlAbortRef = useRef<AbortController | null>(null);
 
   const startDownload = async () => {
-    if (!playlistUrl) return;
     if (dlProgress && dlProgress.status !== 'done' && dlProgress.status !== 'error') return;
+    if (mp4Progress && mp4Progress.status !== 'done' && mp4Progress.status !== 'error') return;
     const ctrl = new AbortController();
     dlAbortRef.current = ctrl;
-    setDlProgress({ done: 0, total: 0, bytes: 0, status: 'parsing' });
-    try {
-      await downloadHls(playlistUrl, title, setDlProgress, ctrl.signal);
-    } catch {
-      // progress already set to error
+
+    // Prefer MP4 downloader when we have a direct MP4 URL — routes through
+    // mp4-proxy so we get a friendly filename, Range-chunked with retries.
+    if (mp4Url) {
+      const proxied = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(mp4Url)}&dl=1&name=${encodeURIComponent(title)}&apikey=${APIKEY}`;
+      setMp4Progress({ bytes: 0, total: 0, status: 'starting' });
+      try { await downloadMp4(proxied, title, setMp4Progress, ctrl.signal); } catch { /* progress set */ }
+      return;
     }
+
+    if (!playlistUrl) return;
+    setDlProgress({ done: 0, total: 0, bytes: 0, status: 'parsing' });
+    try { await downloadHls(playlistUrl, title, setDlProgress, ctrl.signal); } catch { /* progress set */ }
   };
   const cancelDownload = () => {
     dlAbortRef.current?.abort();
     setDlProgress(null);
+    setMp4Progress(null);
   };
+
 
   const fmt = (s: number) => {
     if (!Number.isFinite(s)) return '';
@@ -398,30 +470,61 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     )}
 
     {/* Download bar — rendered OUTSIDE the video so taps are never eaten by native controls */}
-    {mp4Url && !error ? (
-      <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
-            <Download size={14} className="text-primary shrink-0" />
-            <span className="truncate">
-              Direct MP4 {mp4Label ? `(${mp4Label})` : ''} — one-tap download, plays anywhere
-            </span>
+    {mp4Url && !error ? (() => {
+      const busy = !!mp4Progress && mp4Progress.status !== 'done' && mp4Progress.status !== 'error';
+      const pct = mp4Progress && mp4Progress.total > 0
+        ? Math.round((mp4Progress.bytes / mp4Progress.total) * 100) : 0;
+      const mb = (b: number) => (b / 1024 / 1024).toFixed(1);
+      return (
+        <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+              <Download size={14} className="text-primary shrink-0" />
+              <span className="truncate">
+                {mp4Progress ? (
+                  mp4Progress.status === 'starting' ? 'Preparing download…' :
+                  mp4Progress.status === 'downloading' ? (
+                    mp4Progress.total > 0
+                      ? `Downloading ${pct}% · ${mb(mp4Progress.bytes)}/${mb(mp4Progress.total)} MB`
+                      : `Downloading · ${mb(mp4Progress.bytes)} MB`
+                  ) :
+                  mp4Progress.status === 'finalizing' ? 'Finalizing file…' :
+                  mp4Progress.status === 'done' ? `Saved ✓ ${mp4Progress.filename} · ${mb(mp4Progress.bytes)} MB` :
+                  mp4Progress.status === 'error' ? `Failed: ${mp4Progress.message}` : ''
+                ) : `Direct MP4 ${mp4Label ? `(${mp4Label})` : ''} — chunked download, resumes on network hiccups`}
+              </span>
+            </div>
+            {busy ? (
+              <button
+                onClick={cancelDownload}
+                className="flex items-center gap-1 px-3 py-1.5 bg-destructive text-destructive-foreground rounded-md text-xs font-bold shrink-0"
+              >
+                <X size={12} /> Cancel
+              </button>
+            ) : (
+              <button
+                onClick={startDownload}
+                disabled={loading}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold shrink-0 transition ${
+                  loading ? 'bg-secondary text-muted-foreground opacity-60'
+                          : 'bg-primary text-primary-foreground hover:opacity-90 active:scale-95'
+                }`}
+              >
+                <Download size={12} /> {mp4Progress?.status === 'done' ? 'Download again' : 'Download MP4'}
+              </button>
+            )}
           </div>
-          <a
-            href={loading ? undefined : `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(mp4Url)}&dl=1&name=${encodeURIComponent(title)}&apikey=${APIKEY}`}
-            aria-disabled={loading}
-            onClick={(e) => { if (loading) e.preventDefault(); }}
-            download={`${title.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 80) || 'video'}.mp4`}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold shrink-0 transition ${
-              loading ? 'bg-secondary text-muted-foreground pointer-events-none opacity-60'
-                      : 'bg-primary text-primary-foreground hover:opacity-90 active:scale-95'
-            }`}
-          >
-            <Download size={12} /> {loading ? 'Loading…' : 'Download MP4'}
-          </a>
+          {mp4Progress && (mp4Progress.total > 0 || mp4Progress.bytes > 0) && (
+            <div className="h-2 bg-background rounded-full overflow-hidden">
+              <div
+                className={`h-full bg-primary transition-all ${mp4Progress.total > 0 ? '' : 'animate-pulse'}`}
+                style={{ width: mp4Progress.total > 0 ? `${pct}%` : '100%' }}
+              />
+            </div>
+          )}
         </div>
-      </div>
-    ) : playlistUrl && !error && (
+      );
+    })() : playlistUrl && !error && (
       <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
@@ -465,6 +568,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
         )}
       </div>
     )}
+
     </div>
   );
 };
