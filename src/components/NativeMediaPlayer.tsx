@@ -6,7 +6,37 @@ import {
   type ResumeKind,
 } from '@/lib/resume';
 import { downloadHls, type DLProgress } from '@/lib/hlsDownloader';
+import { downloadMp4, type MP4Progress } from '@/lib/mp4Downloader';
 import KevStreamControls from './KevStreamControls';
+
+// Fetch with timeout + retries, resilient to flaky mobile networks.
+async function fetchWithRetry(url: string, init: RequestInit = {}, opts: { retries?: number; timeoutMs?: number } = {}) {
+  const retries = opts.retries ?? 3;
+  const timeoutMs = opts.timeoutMs ?? 12000;
+  let lastErr: unknown;
+  for (let i = 0; i <= retries; i++) {
+    const ctrl = new AbortController();
+    const combinedSignal = init.signal
+      ? (() => { const c = new AbortController();
+          init.signal!.addEventListener('abort', () => c.abort(), { once: true });
+          ctrl.signal.addEventListener('abort', () => c.abort(), { once: true });
+          return c.signal; })()
+      : ctrl.signal;
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: combinedSignal });
+      clearTimeout(t);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res;
+    } catch (e) {
+      clearTimeout(t);
+      lastErr = e;
+      if (i < retries) await new Promise((r) => setTimeout(r, 400 * Math.pow(2, i)));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
 
 type Mode =
   | { kind: 'anime'; anilistId: number; episode: number; audioType: 'sub' | 'dub'; malId?: string }
