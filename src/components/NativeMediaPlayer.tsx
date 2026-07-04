@@ -470,30 +470,61 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
     )}
 
     {/* Download bar — rendered OUTSIDE the video so taps are never eaten by native controls */}
-    {mp4Url && !error ? (
-      <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
-            <Download size={14} className="text-primary shrink-0" />
-            <span className="truncate">
-              Direct MP4 {mp4Label ? `(${mp4Label})` : ''} — one-tap download, plays anywhere
-            </span>
+    {mp4Url && !error ? (() => {
+      const busy = !!mp4Progress && mp4Progress.status !== 'done' && mp4Progress.status !== 'error';
+      const pct = mp4Progress && mp4Progress.total > 0
+        ? Math.round((mp4Progress.bytes / mp4Progress.total) * 100) : 0;
+      const mb = (b: number) => (b / 1024 / 1024).toFixed(1);
+      return (
+        <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+              <Download size={14} className="text-primary shrink-0" />
+              <span className="truncate">
+                {mp4Progress ? (
+                  mp4Progress.status === 'starting' ? 'Preparing download…' :
+                  mp4Progress.status === 'downloading' ? (
+                    mp4Progress.total > 0
+                      ? `Downloading ${pct}% · ${mb(mp4Progress.bytes)}/${mb(mp4Progress.total)} MB`
+                      : `Downloading · ${mb(mp4Progress.bytes)} MB`
+                  ) :
+                  mp4Progress.status === 'finalizing' ? 'Finalizing file…' :
+                  mp4Progress.status === 'done' ? `Saved ✓ ${mp4Progress.filename} · ${mb(mp4Progress.bytes)} MB` :
+                  mp4Progress.status === 'error' ? `Failed: ${mp4Progress.message}` : ''
+                ) : `Direct MP4 ${mp4Label ? `(${mp4Label})` : ''} — chunked download, resumes on network hiccups`}
+              </span>
+            </div>
+            {busy ? (
+              <button
+                onClick={cancelDownload}
+                className="flex items-center gap-1 px-3 py-1.5 bg-destructive text-destructive-foreground rounded-md text-xs font-bold shrink-0"
+              >
+                <X size={12} /> Cancel
+              </button>
+            ) : (
+              <button
+                onClick={startDownload}
+                disabled={loading}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold shrink-0 transition ${
+                  loading ? 'bg-secondary text-muted-foreground opacity-60'
+                          : 'bg-primary text-primary-foreground hover:opacity-90 active:scale-95'
+                }`}
+              >
+                <Download size={12} /> {mp4Progress?.status === 'done' ? 'Download again' : 'Download MP4'}
+              </button>
+            )}
           </div>
-          <a
-            href={loading ? undefined : `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(mp4Url)}&dl=1&name=${encodeURIComponent(title)}&apikey=${APIKEY}`}
-            aria-disabled={loading}
-            onClick={(e) => { if (loading) e.preventDefault(); }}
-            download={`${title.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 80) || 'video'}.mp4`}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold shrink-0 transition ${
-              loading ? 'bg-secondary text-muted-foreground pointer-events-none opacity-60'
-                      : 'bg-primary text-primary-foreground hover:opacity-90 active:scale-95'
-            }`}
-          >
-            <Download size={12} /> {loading ? 'Loading…' : 'Download MP4'}
-          </a>
+          {mp4Progress && (mp4Progress.total > 0 || mp4Progress.bytes > 0) && (
+            <div className="h-2 bg-background rounded-full overflow-hidden">
+              <div
+                className={`h-full bg-primary transition-all ${mp4Progress.total > 0 ? '' : 'animate-pulse'}`}
+                style={{ width: mp4Progress.total > 0 ? `${pct}%` : '100%' }}
+              />
+            </div>
+          )}
         </div>
-      </div>
-    ) : playlistUrl && !error && (
+      );
+    })() : playlistUrl && !error && (
       <div className="mt-3 flex flex-col gap-2 bg-secondary/40 border border-border/30 rounded-lg p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
@@ -537,6 +568,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
         )}
       </div>
     )}
+
     </div>
   );
 };
