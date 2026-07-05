@@ -8,6 +8,7 @@ import {
 import { downloadHls, type DLProgress } from '@/lib/hlsDownloader';
 import { downloadMp4, type MP4Progress } from '@/lib/mp4Downloader';
 import KevStreamControls from './KevStreamControls';
+import ConnectionHealth, { type HealthState } from './ConnectionHealth';
 
 // Fetch with timeout + retries, resilient to flaky mobile networks.
 async function fetchWithRetry(url: string, init: RequestInit = {}, opts: { retries?: number; timeoutMs?: number } = {}) {
