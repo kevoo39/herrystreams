@@ -32,7 +32,10 @@ async function fetchWithRetry(url: string, init: RequestInit = {}, opts: { retri
     } catch (e) {
       clearTimeout(t);
       lastErr = e;
-      if (i < retries) await new Promise((r) => setTimeout(r, 400 * Math.pow(2, i)));
+      if (i < retries) {
+        opts.onRetry?.(i + 1, e);
+        await new Promise((r) => setTimeout(r, 400 * Math.pow(2, i)));
+      }
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
