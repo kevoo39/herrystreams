@@ -8,9 +8,10 @@ import {
 import { downloadHls, type DLProgress } from '@/lib/hlsDownloader';
 import { downloadMp4, type MP4Progress } from '@/lib/mp4Downloader';
 import KevStreamControls from './KevStreamControls';
+import ConnectionHealth, { type HealthState } from './ConnectionHealth';
 
 // Fetch with timeout + retries, resilient to flaky mobile networks.
-async function fetchWithRetry(url: string, init: RequestInit = {}, opts: { retries?: number; timeoutMs?: number } = {}) {
+async function fetchWithRetry(url: string, init: RequestInit = {}, opts: { retries?: number; timeoutMs?: number; onRetry?: (attempt: number, err: unknown) => void } = {}) {
   const retries = opts.retries ?? 3;
   const timeoutMs = opts.timeoutMs ?? 12000;
   let lastErr: unknown;
@@ -31,7 +32,10 @@ async function fetchWithRetry(url: string, init: RequestInit = {}, opts: { retri
     } catch (e) {
       clearTimeout(t);
       lastErr = e;
-      if (i < retries) await new Promise((r) => setTimeout(r, 400 * Math.pow(2, i)));
+      if (i < retries) {
+        opts.onRetry?.(i + 1, e);
+        await new Promise((r) => setTimeout(r, 400 * Math.pow(2, i)));
+      }
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
@@ -70,6 +74,10 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
   const [mp4Label, setMp4Label] = useState<string | null>(null);
   const [serverIdx, setServerIdx] = useState(0);
   const [resumePromptAt, setResumePromptAt] = useState<number | null>(null);
+  const [health, setHealth] = useState<HealthState>({ retries: 0, lastEvent: '', stalled: false, stalledSince: null });
+  const bumpRetry = (label: string) =>
+    setHealth((h) => ({ ...h, retries: h.retries + 1, lastEvent: label }));
+
 
   const resumeId = buildResumeId({
     kind: mode.kind as ResumeKind,
@@ -132,7 +140,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           const extractRes = await fetchWithRetry(
             `${FN_BASE}/vidzen-extract?${params}`,
             { headers: { apikey: APIKEY } },
-            { retries: 3, timeoutMs: 15000 },
+            { retries: 3, timeoutMs: 15000, onRetry: (n) => bumpRetry(`extract retry ${n}`) },
           );
           const data = await extractRes.json();
           if (!data?.url) throw new Error('Vidzen returned no stream');
@@ -313,29 +321,56 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+    const clear = () => {
+      if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null; }
+      if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+    };
     const onWaiting = () => {
       clear();
-      timer = setTimeout(() => {
+      setHealth((h) => ({ ...h, stalled: true, stalledSince: Date.now(), lastEvent: 'buffering' }));
+      // 6s: soft nudge to force a fresh segment/range request
+      nudgeTimer = setTimeout(() => {
         try {
           const t = v.currentTime;
           v.currentTime = Math.max(0, t - 0.1);
           v.play().catch(() => {});
+          bumpRetry('nudge');
         } catch { /* ignore */ }
-      }, 12000);
+      }, 6000);
+      // 14s: token likely expired — force full reload (re-extract) by bumping serverIdx to same value via key
+      reloadTimer = setTimeout(() => {
+        bumpRetry('token refresh');
+        setServerIdx((i) => i); // no-op; instead reload src
+        try {
+          const t = v.currentTime;
+          const src = v.src;
+          v.src = '';
+          v.load();
+          v.src = src;
+          v.currentTime = t;
+          v.play().catch(() => {});
+        } catch { /* ignore */ }
+      }, 14000);
     };
-    const onPlaying = () => clear();
+    const onPlaying = () => {
+      clear();
+      setHealth((h) => ({ ...h, stalled: false, stalledSince: null, lastEvent: 'playing' }));
+    };
     v.addEventListener('waiting', onWaiting);
+    v.addEventListener('stalled', onWaiting);
     v.addEventListener('playing', onPlaying);
     v.addEventListener('canplay', onPlaying);
     return () => {
       clear();
       v.removeEventListener('waiting', onWaiting);
+      v.removeEventListener('stalled', onWaiting);
       v.removeEventListener('playing', onPlaying);
       v.removeEventListener('canplay', onPlaying);
     };
   }, [playlistUrl, mp4Url]);
+
 
 
   const tryNextServer = () => setServerIdx((i) => i + 1);
@@ -420,6 +455,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           badge={badge}
         />
       )}
+      {!error && <ConnectionHealth videoRef={videoRef} health={health} loading={loading} />}
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 pointer-events-none">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
