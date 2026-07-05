@@ -11,7 +11,7 @@ import KevStreamControls from './KevStreamControls';
 import ConnectionHealth, { type HealthState } from './ConnectionHealth';
 
 // Fetch with timeout + retries, resilient to flaky mobile networks.
-async function fetchWithRetry(url: string, init: RequestInit = {}, opts: { retries?: number; timeoutMs?: number } = {}) {
+async function fetchWithRetry(url: string, init: RequestInit = {}, opts: { retries?: number; timeoutMs?: number; onRetry?: (attempt: number, err: unknown) => void } = {}) {
   const retries = opts.retries ?? 3;
   const timeoutMs = opts.timeoutMs ?? 12000;
   let lastErr: unknown;
