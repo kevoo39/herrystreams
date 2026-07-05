@@ -71,6 +71,10 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
   const [mp4Label, setMp4Label] = useState<string | null>(null);
   const [serverIdx, setServerIdx] = useState(0);
   const [resumePromptAt, setResumePromptAt] = useState<number | null>(null);
+  const [health, setHealth] = useState<HealthState>({ retries: 0, lastEvent: '', stalled: false, stalledSince: null });
+  const bumpRetry = (label: string) =>
+    setHealth((h) => ({ ...h, retries: h.retries + 1, lastEvent: label }));
+
 
   const resumeId = buildResumeId({
     kind: mode.kind as ResumeKind,
