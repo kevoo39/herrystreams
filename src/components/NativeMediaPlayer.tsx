@@ -73,6 +73,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
   const [mp4Url, setMp4Url] = useState<string | null>(null);
   const [mp4Label, setMp4Label] = useState<string | null>(null);
   const [serverIdx, setServerIdx] = useState(0);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [resumePromptAt, setResumePromptAt] = useState<number | null>(null);
   const [health, setHealth] = useState<HealthState>({ retries: 0, lastEvent: '', stalled: false, stalledSince: null });
   const bumpRetry = (label: string) =>
@@ -200,14 +201,17 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
         // === HLS branch ===
         if (!proxied) {
           if (mode.kind === 'anime') {
-            const res = await fetch(
+            const res = await fetchWithRetry(
               `${FN_BASE}/anime-extract?anilist=${mode.anilistId}&ep=${mode.episode}&type=${mode.audioType}&server=${currentServer}`,
-              { headers: { apikey: APIKEY } }
+              { headers: { apikey: APIKEY } },
+              { retries: 3, timeoutMs: 18000, onRetry: (n) => bumpRetry(`anime extract retry ${n}`) },
             );
             if (!res.ok) throw new Error(`extract ${res.status}`);
             const payload = await res.json();
             if (!payload?.url) throw new Error('No stream URL');
-            proxied = `${FN_BASE}/hls-proxy?url=${encodeURIComponent(payload.url)}&ref=${encodeURIComponent(payload.referer || '')}`;
+            proxied = payload.ctx && payload.path
+              ? `${FN_BASE}/hls-proxy?ctx=${encodeURIComponent(payload.ctx)}&path=${encodeURIComponent(payload.path)}&ref=${encodeURIComponent(payload.referer || '')}`
+              : `${FN_BASE}/hls-proxy?url=${encodeURIComponent(payload.url)}&ref=${encodeURIComponent(payload.referer || '')}`;
           } else {
             const inline = buildPlaylistUrl(serverIdx);
             if (!inline) throw new Error('Cannot build playlist');
@@ -237,14 +241,36 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
         };
 
         if (Hls.isSupported()) {
-          const hls = new Hls({ enableWorker: true, manifestLoadingTimeOut: 12000, manifestLoadingMaxRetry: 1 });
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: false,
+            backBufferLength: 45,
+            manifestLoadingTimeOut: 18000,
+            manifestLoadingMaxRetry: 5,
+            manifestLoadingRetryDelay: 700,
+            levelLoadingMaxRetry: 5,
+            fragLoadingMaxRetry: 6,
+            fragLoadingRetryDelay: 700,
+          });
           hlsRef.current = hls;
           hls.loadSource(proxied);
           hls.attachMedia(video);
           hls.on(Hls.Events.MANIFEST_PARSED, onReady);
           hls.on(Hls.Events.ERROR, (_e, data) => {
+            if (!data.fatal) return;
+            bumpRetry(`hls ${data.details || data.type}`);
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              hls.startLoad();
+              return;
+            }
+            if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hls.recoverMediaError();
+              return;
+            }
             if (data.fatal) {
-              if ((mode.kind === 'movie' || mode.kind === 'tv') && serverIdx < mediaServers.length - 1) {
+              if (mode.kind === 'anime' && serverIdx < animeServers.length - 1) {
+                setServerIdx((i) => i + 1);
+              } else if ((mode.kind === 'movie' || mode.kind === 'tv') && serverIdx < mediaServers.length - 1) {
                 setServerIdx((i) => i + 1);
               } else {
                 setError(data.details || 'Playback error');
@@ -273,7 +299,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(mode), serverIdx]);
+  }, [JSON.stringify(mode), serverIdx, reloadNonce]);
 
   // Persist player settings on change + save resume position periodically
   useEffect(() => {
@@ -342,7 +368,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
       // 14s: token likely expired — force full reload (re-extract) by bumping serverIdx to same value via key
       reloadTimer = setTimeout(() => {
         bumpRetry('token refresh');
-        setServerIdx((i) => i); // no-op; instead reload src
+        setReloadNonce((n) => n + 1);
         try {
           const t = v.currentTime;
           const src = v.src;

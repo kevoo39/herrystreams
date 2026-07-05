@@ -48,7 +48,64 @@ const TV_SERVERS: Record<string, string> = {
   vidlink: "https://new.vidnest.fun/vidlink/tv",
 };
 
+function animeEndpoint(ctx: Record<string, string>): string | null {
+  if (!ctx.anilist || !ctx.episode) return null;
+  const audio = ctx.audioType || "sub";
+  return ctx.server === "anitaku"
+    ? `https://new.vidnest.fun/anitaku/${ctx.anilist}/${ctx.episode}/${audio}/hd-2`
+    : `https://new.vidnest.fun/hianime/anime/${ctx.anilist}/${ctx.episode}/${audio}`;
+}
+
+function pickAnimeSource(payload: any, server: string) {
+  const sources = payload?.sources ?? payload?.multiSrc ?? [];
+  if (!Array.isArray(sources) || !sources.length) return null;
+  if (server === "anitaku") {
+    return sources.find((s: any) => s?.server === "HD-2" && s?.url)
+      ?? sources.find((s: any) => s?.quality === "HD" && s?.url)
+      ?? sources.find((s: any) => s?.url || s?.file);
+  }
+  return sources.find((s: any) => s?.file || s?.url) ?? null;
+}
+
 async function extractStream(ctx: Record<string, string>): Promise<{ prefix: string; referer: string } | null> {
+  if (ctx.type === "anime") {
+    const endpoint = animeEndpoint(ctx);
+    if (!endpoint) return null;
+    const referer = ctx.server === "anitaku" ? "https://anitaku.to" : "https://megaplay.buzz/";
+    const res = await fetch(endpoint, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+        Accept: "*/*",
+        Referer: "https://megaplay.buzz/",
+        Origin: "https://megaplay.buzz",
+      },
+    });
+    if (!res.ok) return null;
+    const raw = await res.json();
+    let payload: any = raw;
+    if (raw?.encrypted && typeof raw.data === "string") {
+      try { payload = JSON.parse(decryptCipher(raw.data)); } catch { return null; }
+    }
+    const pick = pickAnimeSource(payload, ctx.server);
+    const masterUrl = pick?.file || pick?.url;
+    if (!masterUrl) return null;
+    try {
+      const head = await fetch(masterUrl, {
+        method: "GET",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+          Referer: referer,
+          Origin: new URL(referer).origin,
+        },
+        redirect: "follow",
+      });
+      await head.body?.cancel();
+      return { prefix: getPrefix(head.url || masterUrl), referer };
+    } catch {
+      return { prefix: getPrefix(masterUrl), referer };
+    }
+  }
+
   const map = ctx.type === "tv" ? TV_SERVERS : MOVIE_SERVERS;
   const base = map[ctx.server];
   if (!base) return null;
