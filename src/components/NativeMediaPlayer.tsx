@@ -321,29 +321,56 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+    const clear = () => {
+      if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null; }
+      if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+    };
     const onWaiting = () => {
       clear();
-      timer = setTimeout(() => {
+      setHealth((h) => ({ ...h, stalled: true, stalledSince: Date.now(), lastEvent: 'buffering' }));
+      // 6s: soft nudge to force a fresh segment/range request
+      nudgeTimer = setTimeout(() => {
         try {
           const t = v.currentTime;
           v.currentTime = Math.max(0, t - 0.1);
           v.play().catch(() => {});
+          bumpRetry('nudge');
         } catch { /* ignore */ }
-      }, 12000);
+      }, 6000);
+      // 14s: token likely expired — force full reload (re-extract) by bumping serverIdx to same value via key
+      reloadTimer = setTimeout(() => {
+        bumpRetry('token refresh');
+        setServerIdx((i) => i); // no-op; instead reload src
+        try {
+          const t = v.currentTime;
+          const src = v.src;
+          v.src = '';
+          v.load();
+          v.src = src;
+          v.currentTime = t;
+          v.play().catch(() => {});
+        } catch { /* ignore */ }
+      }, 14000);
     };
-    const onPlaying = () => clear();
+    const onPlaying = () => {
+      clear();
+      setHealth((h) => ({ ...h, stalled: false, stalledSince: null, lastEvent: 'playing' }));
+    };
     v.addEventListener('waiting', onWaiting);
+    v.addEventListener('stalled', onWaiting);
     v.addEventListener('playing', onPlaying);
     v.addEventListener('canplay', onPlaying);
     return () => {
       clear();
       v.removeEventListener('waiting', onWaiting);
+      v.removeEventListener('stalled', onWaiting);
       v.removeEventListener('playing', onPlaying);
       v.removeEventListener('canplay', onPlaying);
     };
   }, [playlistUrl, mp4Url]);
+
 
 
   const tryNextServer = () => setServerIdx((i) => i + 1);
