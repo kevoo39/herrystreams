@@ -140,7 +140,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           const extractRes = await fetchWithRetry(
             `${FN_BASE}/vidzen-extract?${params}`,
             { headers: { apikey: APIKEY } },
-            { retries: 3, timeoutMs: 15000 },
+            { retries: 3, timeoutMs: 15000, onRetry: (n) => bumpRetry(`extract retry ${n}`) },
           );
           const data = await extractRes.json();
           if (!data?.url) throw new Error('Vidzen returned no stream');
