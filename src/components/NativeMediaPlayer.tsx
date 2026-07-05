@@ -455,6 +455,7 @@ const NativeMediaPlayer: React.FC<NativeMediaPlayerProps> = ({ mode, title, post
           badge={badge}
         />
       )}
+      {!error && <ConnectionHealth videoRef={videoRef} health={health} loading={loading} />}
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 pointer-events-none">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
