@@ -6,6 +6,7 @@ import { tmdbService, TMDBTVShowDetails, TMDBEpisode } from '@/lib/tmdb';
 import { Play, Plus, Star, Calendar, ChevronLeft, ChevronDown, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { addToMyList, removeFromMyList, isInMyList } from '@/lib/myList';
+import EpisodeDownloadButton from '@/components/EpisodeDownloadButton';
 
 const TVShowDetails = () => {
   const { id } = useParams();
