@@ -2,14 +2,16 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import VideoPlayer from '@/components/VideoPlayer';
-import { Play, Plus, Star, Calendar, Clock, ChevronLeft, List, Volume2, VolumeX, Bug } from 'lucide-react';
+import { Play, Plus, Star, Calendar, Clock, ChevronLeft, List, Volume2, VolumeX, Bug, Download as DownloadIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import EpisodeDownloadButton from '@/components/EpisodeDownloadButton';
 
 import {
   fetchAnilistMeta,
   parseAnilistEpTitle,
   detectPartNumber,
   buildDisplayEpisodes,
+  malToAnilistId,
   type AniListMeta,
 } from '@/lib/malToAnilist';
 
