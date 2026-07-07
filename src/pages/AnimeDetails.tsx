@@ -385,27 +385,44 @@ const AnimeDetails = () => {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {paginatedEpisodes.length > 0 ? paginatedEpisodes.map((ep: any) => (
-                  <button
+                  <div
                     key={ep.mal_id}
-                    onClick={() => { setSelectedEpisode(ep.mal_id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                    className={`flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                    className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
                       selectedEpisode === ep.mal_id ? 'border-primary bg-primary/5' : 'border-border/30 hover:border-primary/30 hover:bg-secondary/30'
                     }`}
                   >
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
-                      selectedEpisode === ep.mal_id ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
-                    }`}>
-                      {ep.mal_id}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold truncate">{ep.title || `Episode ${ep.mal_id}`}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {partNumber > 1 && <span className="mr-1">Overall Ep {ep.overallNumber}</span>}
-                        {ep.aired && <span>{new Date(ep.aired).toLocaleDateString()}</span>}
-                      </p>
-                    </div>
-                    <Play size={14} className="text-muted-foreground shrink-0" />
-                  </button>
+                    <button
+                      onClick={() => { setSelectedEpisode(ep.mal_id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                        selectedEpisode === ep.mal_id ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+                      }`}>
+                        {ep.mal_id}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold truncate">{ep.title || `Episode ${ep.mal_id}`}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {partNumber > 1 && <span className="mr-1">Overall Ep {ep.overallNumber}</span>}
+                          {ep.aired && <span>{new Date(ep.aired).toLocaleDateString()}</span>}
+                        </p>
+                      </div>
+                      <Play size={14} className="text-muted-foreground shrink-0" />
+                    </button>
+                    {anilistMeta?.id && (
+                      <EpisodeDownloadButton
+                        target={{
+                          kind: 'anime',
+                          anilistId: anilistMeta.id,
+                          malId: id,
+                          episode: ep.mal_id,
+                          audioType: downloadAudio,
+                          parentTitle: anime.title,
+                          image: anime.images?.webp?.large_image_url,
+                        }}
+                      />
+                    )}
+                  </div>
                 )) : (
                   <p className="text-sm text-muted-foreground col-span-2 text-center py-8">No episode data available. Click "Watch Now" to start from Episode 1.</p>
                 )}
