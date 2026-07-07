@@ -314,7 +314,21 @@ const AnimeDetails = () => {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 bg-secondary border border-border/30 rounded-lg p-0.5" title="Audio track used for downloads">
+                  <DownloadIcon size={11} className="text-muted-foreground ml-1.5" />
+                  {(['sub', 'dub'] as const).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setDownloadAudio(t)}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                        downloadAudio === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
                 <button
                   onClick={() => setShowDebug(v => !v)}
                   title="Show episode data source"
