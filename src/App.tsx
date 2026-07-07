@@ -36,6 +36,7 @@ const App = () => (
           <Route path="/tv/:id" element={<TVShowDetails />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/my-list" element={<MyList />} />
+          <Route path="/downloads" element={<Downloads />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
