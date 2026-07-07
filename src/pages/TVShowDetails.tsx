@@ -189,20 +189,34 @@ const TVShowDetails = () => {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {episodes.map(ep => (
-                  <button
+                  <div
                     key={ep.id}
-                    onClick={() => setPlayingEpisode({ season: selectedSeason, episode: ep.episode_number })}
-                    className="flex items-center gap-3 p-3 rounded-lg border border-border/30 hover:border-primary/30 hover:bg-secondary/30 transition-all text-left"
+                    className="flex items-center gap-3 p-3 rounded-lg border border-border/30 hover:border-primary/30 hover:bg-secondary/30 transition-all"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0">
-                      {ep.episode_number}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold truncate">{ep.name}</p>
-                      {ep.runtime && <p className="text-[10px] text-muted-foreground">{ep.runtime} min</p>}
-                    </div>
-                    <Play size={14} className="text-muted-foreground shrink-0" />
-                  </button>
+                    <button
+                      onClick={() => setPlayingEpisode({ season: selectedSeason, episode: ep.episode_number })}
+                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0">
+                        {ep.episode_number}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold truncate">{ep.name}</p>
+                        {ep.runtime && <p className="text-[10px] text-muted-foreground">{ep.runtime} min</p>}
+                      </div>
+                      <Play size={14} className="text-muted-foreground shrink-0" />
+                    </button>
+                    <EpisodeDownloadButton
+                      target={{
+                        kind: 'tv',
+                        tmdbId: show.id,
+                        season: selectedSeason,
+                        episode: ep.episode_number,
+                        parentTitle: show.name,
+                        image: tmdbService.getPosterUrl(show.poster_path),
+                      }}
+                    />
+                  </div>
                 ))}
               </div>
             )}
