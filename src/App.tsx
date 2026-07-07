@@ -12,6 +12,7 @@ import MovieDetails from "./pages/MovieDetails";
 import TVShowDetails from "./pages/TVShowDetails";
 import SearchPage from "./pages/SearchPage";
 import MyList from "./pages/MyList";
+import Downloads from "./pages/Downloads";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import BottomNav from "./components/BottomNav";
@@ -35,6 +36,7 @@ const App = () => (
           <Route path="/tv/:id" element={<TVShowDetails />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/my-list" element={<MyList />} />
+          <Route path="/downloads" element={<Downloads />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
