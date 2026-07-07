@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Film, Tv, Sparkles, Bookmark, Search, Settings as SettingsIcon } from 'lucide-react';
+import { Home, Film, Tv, Sparkles, Bookmark, Search, Download, Settings as SettingsIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const items = [
@@ -9,6 +9,7 @@ const items = [
   { to: '/anime', label: 'Anime', icon: Sparkles },
   { to: '/search', label: 'Search', icon: Search },
   { to: '/my-list', label: 'List', icon: Bookmark },
+  { to: '/downloads', label: 'Saved', icon: Download },
   { to: '/settings', label: 'More', icon: SettingsIcon },
 ];
 
