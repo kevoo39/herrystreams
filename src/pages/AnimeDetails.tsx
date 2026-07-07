@@ -33,6 +33,7 @@ const AnimeDetails = () => {
   const [anilistMeta, setAnilistMeta] = useState<AniListMeta | null>(null);
   const [episodesLoading, setEpisodesLoading] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+  const [downloadAudio, setDownloadAudio] = useState<'sub' | 'dub'>('sub');
 
   // Fetch all episode pages from Jikan
   const fetchAllEpisodes = useCallback(async (animeId: string) => {
