@@ -121,6 +121,15 @@ const MovieDetails = () => {
                   {inList ? <Check size={16} className="text-primary" /> : <Plus size={16} />}
                   {inList ? 'In List' : 'My List'}
                 </button>
+                <EpisodeDownloadButton
+                  variant="full"
+                  target={{
+                    kind: 'movie',
+                    tmdbId: movie.id,
+                    parentTitle: movie.title,
+                    image: tmdbService.getPosterUrl(movie.poster_path),
+                  }}
+                />
               </div>
 
               {movie.credits?.cast && movie.credits.cast.length > 0 && (
