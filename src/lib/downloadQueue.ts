@@ -335,10 +335,9 @@ async function fetchJsonWithRetry(url: string, signal: AbortSignal, retries = 3,
 async function acquireWakeLock() {
   try {
     if (wakeLock) return;
-    // @ts-expect-error not in all TS libs
-    if (navigator.wakeLock && typeof navigator.wakeLock.request === 'function') {
-      // @ts-expect-error see above
-      wakeLock = await navigator.wakeLock.request('screen');
+    const wl = (navigator as any).wakeLock;
+    if (wl && typeof wl.request === 'function') {
+      wakeLock = await wl.request('screen');
       wakeLock.addEventListener?.('release', () => { wakeLock = null; });
     }
   } catch { /* noop */ }
