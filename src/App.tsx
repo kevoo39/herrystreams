@@ -17,6 +17,9 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import BottomNav from "./components/BottomNav";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
+import { initDownloadQueue } from "./lib/downloadQueue";
+
+initDownloadQueue();
 
 const queryClient = new QueryClient();
 
