@@ -245,6 +245,8 @@ async function runJob(job: DownloadJob) {
 
 async function executeJob(job: DownloadJob, signal: AbortSignal) {
   const { target, filename } = job;
+  const quality = (target as any).quality as ('auto' | '1080' | '720' | '480' | '360' | undefined);
+  const preferredHeight = quality && quality !== 'auto' ? parseInt(quality, 10) : undefined;
 
   if (target.kind === 'movie' || target.kind === 'tv') {
     const params = new URLSearchParams({ type: target.kind, tmdb: String(target.tmdbId) });
@@ -252,13 +254,14 @@ async function executeJob(job: DownloadJob, signal: AbortSignal) {
       params.set('season', String(target.season));
       params.set('episode', String(target.episode));
     }
+    if (quality && quality !== 'auto') params.set('quality', `${quality}p`);
     const data = await fetchJsonWithRetry(`${FN_BASE}/vidzen-extract?${params}`, signal);
     if (!data?.url) throw new Error('No stream URL from Vidzen');
     const isHls = data.type === 'hls' || /\.m3u8(\?|$)/.test(data.url);
 
     if (isHls) {
       const proxied = `${FN_BASE}/hls-proxy?url=${encodeURIComponent(data.url)}&ref=${encodeURIComponent('https://vidzen.fun/')}`;
-      await downloadHls(proxied, filename, (p: DLProgress) => onHls(job, p), signal);
+      await downloadHls(proxied, filename, (p: DLProgress) => onHls(job, p), signal, preferredHeight);
     } else {
       const proxied = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(data.url)}&dl=1&name=${encodeURIComponent(filename)}&apikey=${APIKEY}`;
       await downloadMp4(proxied, filename, (p: MP4Progress) => onMp4(job, p), signal);
@@ -275,7 +278,7 @@ async function executeJob(job: DownloadJob, signal: AbortSignal) {
   const proxied = data.ctx && data.path
     ? `${FN_BASE}/hls-proxy?ctx=${encodeURIComponent(data.ctx)}&path=${encodeURIComponent(data.path)}&ref=${encodeURIComponent(data.referer || '')}`
     : `${FN_BASE}/hls-proxy?url=${encodeURIComponent(data.url)}&ref=${encodeURIComponent(data.referer || '')}`;
-  await downloadHls(proxied, filename, (p: DLProgress) => onHls(job, p), signal);
+  await downloadHls(proxied, filename, (p: DLProgress) => onHls(job, p), signal, preferredHeight);
 }
 
 function onMp4(job: DownloadJob, p: MP4Progress) {
