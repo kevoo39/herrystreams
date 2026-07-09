@@ -69,11 +69,12 @@ export async function downloadHls(
   filename: string,
   onProgress: (p: DLProgress) => void,
   signal?: AbortSignal,
+  preferredHeight?: number,
 ): Promise<void> {
   const startedAt = performance.now();
   try {
     onProgress({ done: 0, total: 0, bytes: 0, status: 'parsing' });
-    const { url: mediaUrl, text } = await resolveMediaPlaylist(playlistUrl);
+    const { url: mediaUrl, text } = await resolveMediaPlaylist(playlistUrl, preferredHeight);
     const segments = parseSegments(text, mediaUrl);
     if (!segments.length) throw new Error('No segments found');
 
