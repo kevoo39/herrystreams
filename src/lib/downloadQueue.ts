@@ -64,10 +64,11 @@ function loadFromStorage(): DownloadJob[] {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
     const arr: DownloadJob[] = JSON.parse(raw);
-    // Any job that was mid-flight when the tab died is stranded — mark failed.
+    // Jobs that were mid-flight get re-queued so they resume from the last
+    // persisted chunk (see downloadStore.ts). No more silent "Interrupted".
     return arr.map((j) =>
       j.status === 'downloading' || j.status === 'queued'
-        ? { ...j, status: 'failed' as JobStatus, error: 'Interrupted — app was closed' }
+        ? { ...j, status: 'queued' as JobStatus, error: 'Resuming after reload…' }
         : j,
     );
   } catch {
