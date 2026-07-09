@@ -1,21 +1,21 @@
 // Persistent download queue with real statuses, auto-retry, cancel, and
-// interrupted-job recovery. Runs up to N concurrent jobs and drains
-// automatically. Keeps a screen wake lock while jobs are active so mobile
-// downloads don't die when the screen sleeps.
+// resumable recovery. Runs up to N concurrent jobs and drains automatically.
+// Keeps a screen wake lock while jobs are active so mobile downloads don't
+// die when the screen sleeps.
 //
-// Reality check on "background while app is closed":
-//   - On modern browsers, JS keeps running while the tab is backgrounded
-//     (throttled). Downloads continue as long as the tab is alive.
-//   - If the tab/app is fully closed mid-download, the job is marked
-//     `failed` on next open with reason "interrupted" and can be retried
-//     in one tap. iOS Safari cannot continue arbitrary downloads after the
-//     tab is killed — that is a platform limit, not a code bug.
-//   - For MP4 targets we offer a `handoffToBrowser` mode that triggers the
-//     browser's own downloader on the proxied URL; that download survives
-//     the tab being closed on desktop and Android.
+// Resume model:
+//   - Every fetched chunk (mp4 range) or segment (HLS) is persisted to
+//     IndexedDB via downloadStore.ts.
+//   - On tab reload / crash, jobs that were mid-flight are re-queued (not
+//     marked failed). The downloader skips any chunk that's already on disk
+//     and picks up from the next missing one.
+//   - Cancel / remove clears the partial buffer.
+//   - iOS Safari can still evict IDB under pressure; that's a platform
+//     limit, not a code bug.
 
 import { downloadMp4, type MP4Progress } from '@/lib/mp4Downloader';
 import { downloadHls, type DLProgress } from '@/lib/hlsDownloader';
+import { clearJob as clearJobStore } from '@/lib/downloadStore';
 import { recordDownload } from '@/lib/downloads';
 import type { DownloadTarget } from '@/components/EpisodeDownloadButton';
 
