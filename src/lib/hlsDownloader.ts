@@ -20,24 +20,37 @@ async function fetchText(url: string): Promise<string> {
   return r.text();
 }
 
-// Resolve a media playlist (no #EXT-X-STREAM-INF). If master, pick highest bandwidth.
-async function resolveMediaPlaylist(url: string): Promise<{ url: string; text: string }> {
+// Resolve a media playlist (no #EXT-X-STREAM-INF). If master, pick by preferred
+// height (closest at-or-below); falls back to highest bandwidth when unknown.
+async function resolveMediaPlaylist(
+  url: string,
+  preferredHeight?: number,
+): Promise<{ url: string; text: string }> {
   const text = await fetchText(url);
   if (!text.includes('#EXT-X-STREAM-INF')) return { url, text };
   const lines = text.split(/\r?\n/);
-  let bestBw = -1;
-  let bestUri = '';
+  const variants: { bw: number; h: number; uri: string }[] = [];
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     if (l.startsWith('#EXT-X-STREAM-INF')) {
-      const m = /BANDWIDTH=(\d+)/.exec(l);
-      const bw = m ? parseInt(m[1], 10) : 0;
+      const bwM = /BANDWIDTH=(\d+)/.exec(l);
+      const resM = /RESOLUTION=\d+x(\d+)/i.exec(l);
       const uri = (lines[i + 1] || '').trim();
-      if (uri && bw > bestBw) { bestBw = bw; bestUri = uri; }
+      if (uri) variants.push({ bw: bwM ? +bwM[1] : 0, h: resM ? +resM[1] : 0, uri });
     }
   }
-  if (!bestUri) throw new Error('No variant in master playlist');
-  const abs = new URL(bestUri, url).toString();
+  if (!variants.length) throw new Error('No variant in master playlist');
+
+  let pick = variants[0];
+  if (preferredHeight && variants.some((v) => v.h > 0)) {
+    // closest height at or below target; if none below, take the smallest above
+    const withH = variants.filter((v) => v.h > 0).sort((a, b) => a.h - b.h);
+    const below = withH.filter((v) => v.h <= preferredHeight).pop();
+    pick = below || withH[0];
+  } else {
+    pick = [...variants].sort((a, b) => b.bw - a.bw)[0];
+  }
+  const abs = new URL(pick.uri, url).toString();
   return resolveMediaPlaylist(abs);
 }
 
@@ -56,11 +69,12 @@ export async function downloadHls(
   filename: string,
   onProgress: (p: DLProgress) => void,
   signal?: AbortSignal,
+  preferredHeight?: number,
 ): Promise<void> {
   const startedAt = performance.now();
   try {
     onProgress({ done: 0, total: 0, bytes: 0, status: 'parsing' });
-    const { url: mediaUrl, text } = await resolveMediaPlaylist(playlistUrl);
+    const { url: mediaUrl, text } = await resolveMediaPlaylist(playlistUrl, preferredHeight);
     const segments = parseSegments(text, mediaUrl);
     if (!segments.length) throw new Error('No segments found');
 
