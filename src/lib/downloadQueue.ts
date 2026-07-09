@@ -367,25 +367,28 @@ if (typeof document !== 'undefined') {
 // ---------- helpers ----------
 
 function buildIdentity(target: DownloadTarget): { id: string; display: string; filename: string } {
+  const q = (target as any).quality as string | undefined;
+  const qSuffix = q && q !== 'auto' ? `-${q}` : '';
+  const qTag = q && q !== 'auto' ? ` ${q}p` : '';
   if (target.kind === 'movie') {
     return {
-      id: `movie-${target.tmdbId}`,
-      display: target.parentTitle,
-      filename: target.parentTitle,
+      id: `movie-${target.tmdbId}${qSuffix}`,
+      display: `${target.parentTitle}${qTag}`,
+      filename: `${target.parentTitle}${qTag}`,
     };
   }
   if (target.kind === 'tv') {
     const pad = (n: number) => String(n).padStart(2, '0');
     const tag = `S${pad(target.season)}E${pad(target.episode)}`;
     return {
-      id: `tv-${target.tmdbId}-s${target.season}e${target.episode}`,
-      display: `${target.parentTitle} · ${tag}`,
-      filename: `${target.parentTitle} ${tag}`,
+      id: `tv-${target.tmdbId}-s${target.season}e${target.episode}${qSuffix}`,
+      display: `${target.parentTitle} · ${tag}${qTag}`,
+      filename: `${target.parentTitle} ${tag}${qTag}`,
     };
   }
   return {
-    id: `anime-${target.anilistId}-${target.episode}-${target.audioType}`,
-    display: `${target.parentTitle} · E${target.episode} · ${target.audioType.toUpperCase()}`,
-    filename: `${target.parentTitle} E${target.episode} ${target.audioType}`,
+    id: `anime-${target.anilistId}-${target.episode}-${target.audioType}${qSuffix}`,
+    display: `${target.parentTitle} · E${target.episode} · ${target.audioType.toUpperCase()}${qTag}`,
+    filename: `${target.parentTitle} E${target.episode} ${target.audioType}${qTag}`,
   };
 }
