@@ -265,10 +265,10 @@ async function executeJob(job: DownloadJob, signal: AbortSignal) {
 
     if (isHls) {
       const proxied = `${FN_BASE}/hls-proxy?url=${encodeURIComponent(data.url)}&ref=${encodeURIComponent('https://vidzen.fun/')}`;
-      await downloadHls(proxied, filename, (p: DLProgress) => onHls(job, p), signal, preferredHeight);
+      await downloadHls(proxied, filename, (p: DLProgress) => onHls(job, p), signal, preferredHeight, job.id);
     } else {
       const proxied = `${FN_BASE}/mp4-proxy?url=${encodeURIComponent(data.url)}&dl=1&name=${encodeURIComponent(filename)}&apikey=${APIKEY}`;
-      await downloadMp4(proxied, filename, (p: MP4Progress) => onMp4(job, p), signal);
+      await downloadMp4(proxied, filename, (p: MP4Progress) => onMp4(job, p), signal, job.id);
     }
     return;
   }
@@ -282,7 +282,7 @@ async function executeJob(job: DownloadJob, signal: AbortSignal) {
   const proxied = data.ctx && data.path
     ? `${FN_BASE}/hls-proxy?ctx=${encodeURIComponent(data.ctx)}&path=${encodeURIComponent(data.path)}&ref=${encodeURIComponent(data.referer || '')}`
     : `${FN_BASE}/hls-proxy?url=${encodeURIComponent(data.url)}&ref=${encodeURIComponent(data.referer || '')}`;
-  await downloadHls(proxied, filename, (p: DLProgress) => onHls(job, p), signal, preferredHeight);
+  await downloadHls(proxied, filename, (p: DLProgress) => onHls(job, p), signal, preferredHeight, job.id);
 }
 
 function onMp4(job: DownloadJob, p: MP4Progress) {
