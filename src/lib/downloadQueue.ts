@@ -159,6 +159,8 @@ export function cancel(id: string) {
     j.finishedAt = Date.now();
     emit();
   }
+  // Drop any partial chunks so a new attempt starts clean.
+  clearJobStore(id).catch(() => { /* noop */ });
   releaseWakeLockIfIdle();
 }
 
@@ -166,6 +168,7 @@ export function remove(id: string) {
   cancel(id);
   jobs = jobs.filter((j) => j.id !== id);
   controllers.delete(id);
+  clearJobStore(id).catch(() => { /* noop */ });
   emit();
 }
 
