@@ -115,7 +115,11 @@ const Downloads = () => {
           )}
           {tab !== 'active' && filtered.length > 0 && (
             <button
-              onClick={() => { if (confirm(`Clear ${tab} download history?`)) clearDownloads(tab as DownloadKind); }}
+              onClick={() => {
+                if (!confirm(`Clear ${tab} download history? Offline copies will be deleted.`)) return;
+                filtered.forEach((e) => deleteOfflineFile(e.id));
+                clearDownloads(tab as DownloadKind);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-muted-foreground hover:text-destructive transition-colors"
             >
               <Trash2 size={12} /> Clear
