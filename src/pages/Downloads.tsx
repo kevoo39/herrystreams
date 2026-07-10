@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Film, Tv, Sparkles, Trash2, Download as DownloadIcon, ChevronRight,
-  Loader2, Clock, Check, AlertCircle, X, RotateCw, Activity,
+  Loader2, Clock, Check, AlertCircle, X, RotateCw, Activity, Play,
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import EpisodeDownloadButton, { type DownloadTarget } from '@/components/EpisodeDownloadButton';
+import OfflinePlayer from '@/components/OfflinePlayer';
 import {
   listDownloads, removeDownload, clearDownloads,
   type DownloadEntry, type DownloadKind,
@@ -14,6 +15,7 @@ import {
   initDownloadQueue, subscribe, cancel, retry, remove, clearFinished,
   type DownloadJob, type JobStatus,
 } from '@/lib/downloadQueue';
+import { listOfflineIds, deleteOfflineFile } from '@/lib/offlineLibrary';
 
 type TabKey = DownloadKind | 'active';
 
@@ -66,16 +68,22 @@ const Downloads = () => {
   const [tab, setTab] = useState<TabKey>('active');
   const [items, setItems] = useState<DownloadEntry[]>([]);
   const [jobs, setJobs] = useState<DownloadJob[]>([]);
+  const [offlineSet, setOfflineSet] = useState<Set<string>>(new Set());
+  const [playing, setPlaying] = useState<{ id: string; title: string } | null>(null);
 
   useEffect(() => {
     initDownloadQueue();
     const refresh = () => setItems(listDownloads());
+    const refreshOffline = () => { listOfflineIds().then((ids) => setOfflineSet(new Set(ids))); };
     refresh();
+    refreshOffline();
     window.addEventListener('kevnest-downloads-changed', refresh);
+    window.addEventListener('kevnest-offline-changed', refreshOffline);
     window.addEventListener('storage', refresh);
-    const unsub = subscribe(setJobs);
+    const unsub = subscribe((next) => { setJobs(next); refreshOffline(); });
     return () => {
       window.removeEventListener('kevnest-downloads-changed', refresh);
+      window.removeEventListener('kevnest-offline-changed', refreshOffline);
       window.removeEventListener('storage', refresh);
       unsub();
     };
@@ -107,7 +115,11 @@ const Downloads = () => {
           )}
           {tab !== 'active' && filtered.length > 0 && (
             <button
-              onClick={() => { if (confirm(`Clear ${tab} download history?`)) clearDownloads(tab as DownloadKind); }}
+              onClick={() => {
+                if (!confirm(`Clear ${tab} download history? Offline copies will be deleted.`)) return;
+                filtered.forEach((e) => deleteOfflineFile(e.id));
+                clearDownloads(tab as DownloadKind);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-muted-foreground hover:text-destructive transition-colors"
             >
               <Trash2 size={12} /> Clear
@@ -243,41 +255,69 @@ const Downloads = () => {
           <ul className="flex flex-col gap-2">
             {filtered.map(e => {
               const target = entryToTarget(e);
+              const offline = offlineSet.has(e.id);
               return (
                 <li
                   key={e.id}
                   className="flex items-center gap-3 p-3 rounded-lg border border-border/30 bg-secondary/30 hover:border-primary/30 transition-colors"
                 >
-                  {e.image ? (
-                    <img src={e.image} alt="" className="w-12 h-16 rounded-md object-cover shrink-0 bg-background" />
-                  ) : (
-                    <div className="w-12 h-16 rounded-md bg-background flex items-center justify-center shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => offline && setPlaying({ id: e.id, title: e.title })}
+                    disabled={!offline}
+                    className="relative w-12 h-16 rounded-md bg-background flex items-center justify-center shrink-0 overflow-hidden group/thumb disabled:cursor-default"
+                    title={offline ? 'Play offline' : 'No offline copy'}
+                  >
+                    {e.image ? (
+                      <img src={e.image} alt="" className="w-full h-full object-cover" />
+                    ) : (
                       <DownloadIcon size={16} className="text-muted-foreground" />
-                    </div>
-                  )}
-                  <Link to={entryLink(e)} className="flex-1 min-w-0 group">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-sm font-semibold truncate group-hover:text-primary transition-colors">{e.title}</p>
+                    )}
+                    {offline && (
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity">
+                        <Play size={18} className="text-white fill-white" />
+                      </span>
+                    )}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                      <p className="text-sm font-semibold truncate">{e.title}</p>
                       {statusBadge('completed')}
+                      {offline && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-primary/15 text-primary border-primary/30">
+                          Offline
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground truncate">
                       {new Date(e.savedAt).toLocaleString()}
                       {e.bytes ? ` · ${fmtBytes(e.bytes)}` : ''}
                       {e.filename ? ` · ${e.filename}` : ''}
                     </p>
-                  </Link>
+                  </div>
+                  {offline && (
+                    <button
+                      onClick={() => setPlaying({ id: e.id, title: e.title })}
+                      className="hidden sm:flex h-8 items-center gap-1 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors shrink-0"
+                    >
+                      <Play size={12} className="fill-current" /> Play
+                    </button>
+                  )}
                   {target && <EpisodeDownloadButton target={target} />}
                   <button
-                    onClick={() => removeDownload(e.id)}
+                    onClick={() => {
+                      removeDownload(e.id);
+                      deleteOfflineFile(e.id);
+                    }}
                     className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/40 bg-secondary/40 text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors shrink-0"
-                    title="Remove from history"
+                    title="Remove from library"
                   >
                     <Trash2 size={14} />
                   </button>
                   <Link
                     to={entryLink(e)}
                     className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/40 bg-secondary/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors shrink-0"
-                    title="Open"
+                    title="Open details"
                   >
                     <ChevronRight size={14} />
                   </Link>
@@ -287,6 +327,13 @@ const Downloads = () => {
           </ul>
         )}
       </main>
+      {playing && (
+        <OfflinePlayer
+          id={playing.id}
+          title={playing.title}
+          onClose={() => setPlaying(null)}
+        />
+      )}
     </div>
   );
 };

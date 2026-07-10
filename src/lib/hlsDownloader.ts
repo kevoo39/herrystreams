@@ -7,6 +7,7 @@ import {
   putChunk, hasChunk, listChunkIndexes, getAllChunksOrdered,
   totalBytesFor, setMeta, clearJob, requestPersistence,
 } from '@/lib/downloadStore';
+import { saveOfflineBlob } from '@/lib/offlineLibrary';
 
 export type DLProgress = {
   done: number;
@@ -145,6 +146,7 @@ export async function downloadHls(
 
     const safe = filename.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 80) || 'video';
     const finalName = `${safe}.ts`;
+    if (persist) await saveOfflineBlob(jobId!, blob, finalName);
     const a = document.createElement('a');
     const objUrl = URL.createObjectURL(blob);
     a.href = objUrl;

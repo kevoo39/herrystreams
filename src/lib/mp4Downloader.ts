@@ -6,6 +6,7 @@ import {
   putChunk, hasChunk, listChunkIndexes, getAllChunksOrdered,
   totalBytesFor, setMeta, getMeta, clearJob, requestPersistence,
 } from '@/lib/downloadStore';
+import { saveOfflineBlob } from '@/lib/offlineLibrary';
 
 export type MP4Progress = {
   bytes: number;
@@ -117,6 +118,7 @@ export async function downloadMp4(
     const blob = new Blob(finalChunks as BlobPart[], { type: 'video/mp4' });
     const safe = filename.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 80) || 'video';
     const finalName = `${safe}.mp4`;
+    if (persist) await saveOfflineBlob(jobId!, blob, finalName);
     const a = document.createElement('a');
     const objUrl = URL.createObjectURL(blob);
     a.href = objUrl;
