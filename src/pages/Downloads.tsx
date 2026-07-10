@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Film, Tv, Sparkles, Trash2, Download as DownloadIcon, ChevronRight,
-  Loader2, Clock, Check, AlertCircle, X, RotateCw, Activity,
+  Loader2, Clock, Check, AlertCircle, X, RotateCw, Activity, Play,
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import EpisodeDownloadButton, { type DownloadTarget } from '@/components/EpisodeDownloadButton';
+import OfflinePlayer from '@/components/OfflinePlayer';
 import {
   listDownloads, removeDownload, clearDownloads,
   type DownloadEntry, type DownloadKind,
@@ -14,6 +15,7 @@ import {
   initDownloadQueue, subscribe, cancel, retry, remove, clearFinished,
   type DownloadJob, type JobStatus,
 } from '@/lib/downloadQueue';
+import { listOfflineIds, deleteOfflineFile } from '@/lib/offlineLibrary';
 
 type TabKey = DownloadKind | 'active';
 
@@ -66,16 +68,22 @@ const Downloads = () => {
   const [tab, setTab] = useState<TabKey>('active');
   const [items, setItems] = useState<DownloadEntry[]>([]);
   const [jobs, setJobs] = useState<DownloadJob[]>([]);
+  const [offlineSet, setOfflineSet] = useState<Set<string>>(new Set());
+  const [playing, setPlaying] = useState<{ id: string; title: string } | null>(null);
 
   useEffect(() => {
     initDownloadQueue();
     const refresh = () => setItems(listDownloads());
+    const refreshOffline = () => { listOfflineIds().then((ids) => setOfflineSet(new Set(ids))); };
     refresh();
+    refreshOffline();
     window.addEventListener('kevnest-downloads-changed', refresh);
+    window.addEventListener('kevnest-offline-changed', refreshOffline);
     window.addEventListener('storage', refresh);
-    const unsub = subscribe(setJobs);
+    const unsub = subscribe((next) => { setJobs(next); refreshOffline(); });
     return () => {
       window.removeEventListener('kevnest-downloads-changed', refresh);
+      window.removeEventListener('kevnest-offline-changed', refreshOffline);
       window.removeEventListener('storage', refresh);
       unsub();
     };
